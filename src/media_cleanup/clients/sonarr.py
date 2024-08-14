@@ -6,7 +6,7 @@ from media_cleanup.schema.sonarr_schema import Season, Series, EpisodeFileResour
 class Result(TypedDict):
     metadata: Series
     original_path: str
-    Season: Season
+    season: int
 
 
 class SonarrClient:
@@ -43,7 +43,7 @@ class SonarrClient:
             matched_episodes = [episode for episode in episodes if episode["path"] == series["original_path"]]
             if matched_episodes:
                 matched_episode: EpisodeFileResource = matched_episodes[0]
-                series_dict[series_id]["Season"] = matched_episode["seasonNumber"]
+                series_dict[series_id]["season"] = matched_episode["seasonNumber"]
 
         return series_dict
 
