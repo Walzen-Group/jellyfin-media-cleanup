@@ -1,4 +1,5 @@
 .cortex/
+cleanup_report.yaml
 
 # secrets
 secrets.yaml

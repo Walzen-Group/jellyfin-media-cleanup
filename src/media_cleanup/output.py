@@ -102,6 +102,8 @@ def _format_movie_list(matches: list[MatchResult]) -> list[dict[str, Any]]:
             entry["match_method"] = m.match_method
         if m.score is not None:
             entry["fuzzy_score"] = round(m.score, 1)
+        if m.size_on_disk:
+            entry["size_gb"] = round(m.size_on_disk / (1024 ** 3), 2)
         items.append(entry)
     return items
 
@@ -135,11 +137,16 @@ def _format_season_list(seasons: list[SeasonSummary]) -> list[dict[str, Any]]:
         if first.fuzzy_score is not None:
             entry["fuzzy_score"] = round(first.fuzzy_score, 1)
 
+        total_size = sum(s.size_on_disk for s in season_list)
+        if total_size:
+            entry["size_gb"] = round(total_size / (1024 ** 3), 2)
+
         entry["seasons"] = [
             {
                 "season": s.season_number,
                 "last_played": s.last_played,
                 "watched_episodes": s.episode_count,
+                **({"size_gb": round(s.size_on_disk / (1024 ** 3), 2)} if s.size_on_disk else {}),
             }
             for s in season_list
         ]

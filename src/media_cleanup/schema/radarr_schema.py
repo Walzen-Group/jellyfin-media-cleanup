@@ -1,126 +1,134 @@
 """
-TypedDict definitions mirroring Radarr API v3 response shapes.
+Pydantic models mirroring Radarr API v3 response shapes.
 See: https://radarr.video/docs/api/#/
 """
 
-from typing import TypedDict, List, Optional
+from pydantic import BaseModel, ConfigDict
+from pydantic.alias_generators import to_camel
 
 
-class Language(TypedDict):
+class _Base(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+
+class Language(_Base):
     id: int
     name: str
 
 
-class QualityDetails(TypedDict):
+class QualityDetails(_Base):
     id: int
     name: str
     source: str
     resolution: int
 
 
-class QualityRevision(TypedDict):
+class QualityRevision(_Base):
     version: int
     real: int
-    isRepack: bool
+    is_repack: bool
 
 
-class QualityModel(TypedDict):
+class QualityModel(_Base):
     quality: QualityDetails
     revision: QualityRevision
 
 
-class MediaInfoResource(TypedDict):
+class MediaInfoResource(_Base):
     id: int
-    audioBitrate: int
-    audioChannels: float
-    audioCodec: str
-    audioLanguages: str
-    audioStreamCount: int
-    videoBitDepth: int
-    videoBitrate: int
-    videoCodec: str
-    videoFps: float
-    videoDynamicRange: str
-    videoDynamicRangeType: str
+    audio_bitrate: int
+    audio_channels: float
+    audio_codec: str
+    audio_languages: str
+    audio_stream_count: int
+    video_bit_depth: int
+    video_bitrate: int
+    video_codec: str
+    video_fps: float
+    video_dynamic_range: str
+    video_dynamic_range_type: str
     resolution: str
-    runTime: str
-    scanType: str
+    run_time: str
+    scan_type: str
     subtitles: str
 
 
-class MovieFileResource(TypedDict):
+class MovieFileResource(_Base):
     """Represents a physical movie file on disk as returned by Radarr."""
     id: int
-    movieId: int
-    relativePath: Optional[str]
-    path: Optional[str]
+    movie_id: int
+    relative_path: str | None = None
+    path: str | None = None
     size: int
-    dateAdded: str  # ISO 8601
-    sceneName: Optional[str]
-    releaseGroup: Optional[str]
-    languages: List[Language]
+    date_added: str  # ISO 8601
+    scene_name: str | None = None
+    release_group: str | None = None
+    languages: list[Language]
     quality: QualityModel
-    mediaInfo: MediaInfoResource
-    qualityCutoffNotMet: bool
-    indexerFlags: Optional[int]
+    media_info: MediaInfoResource
+    quality_cutoff_not_met: bool
+    indexer_flags: int | None = None
 
 
-class Image(TypedDict):
-    coverType: str
+class Image(_Base):
+    cover_type: str
     url: str
-    remoteUrl: str
+    remote_url: str
 
 
-class Ratings(TypedDict):
+class Ratings(_Base):
     votes: int
     value: float
 
 
-class MovieStatistics(TypedDict):
-    movieFileCount: int
-    sizeOnDisk: int
-    releaseGroups: List[str]
+class MovieStatistics(_Base):
+    movie_file_count: int
+    size_on_disk: int
+    release_groups: list[str]
 
 
-class Tag(TypedDict):
+class Tag(_Base):
     """Radarr tag object from /api/v3/tag."""
     id: int
     label: str
 
 
-class Movie(TypedDict):
+class Movie(_Base):
     """Top-level movie object from /api/v3/movie."""
     id: int
     title: str
-    originalTitle: str
-    sortTitle: str
-    sizeOnDisk: int
-    status: str
-    overview: str
-    inCinemas: Optional[str]
-    physicalRelease: Optional[str]
-    digitalRelease: Optional[str]
-    images: List[Image]
-    year: int
+    original_title: str = ""
+    sort_title: str = ""
+    size_on_disk: int = 0
+    status: str = ""
+    overview: str = ""
+    in_cinemas: str | None = None
+    physical_release: str | None = None
+    digital_release: str | None = None
+    images: list[Image] = []
+    year: int = 0
     path: str
-    qualityProfileId: int
-    hasFile: bool
-    movieFileId: int
-    monitored: bool
-    minimumAvailability: str
-    isAvailable: bool
-    folderName: str
-    runtime: int
-    cleanTitle: str
-    imdbId: str
-    tmdbId: int
-    titleSlug: str
-    rootFolderPath: str
-    folder: str
-    certification: Optional[str]
-    genres: List[str]
-    tags: List[int]  # list of tag IDs
-    added: str
-    ratings: Ratings
-    movieFile: Optional[MovieFileResource]
-    statistics: MovieStatistics
+    quality_profile_id: int = 0
+    has_file: bool = False
+    movie_file_id: int = 0
+    monitored: bool = False
+    minimum_availability: str = ""
+    is_available: bool = False
+    folder_name: str = ""
+    runtime: int = 0
+    clean_title: str = ""
+    imdb_id: str = ""
+    tmdb_id: int = 0
+    title_slug: str = ""
+    root_folder_path: str = ""
+    folder: str = ""
+    certification: str | None = None
+    genres: list[str] = []
+    tags: list[int] = []
+    added: str = ""
+    ratings: Ratings | None = None
+    movie_file: MovieFileResource | None = None
+    statistics: MovieStatistics | None = None

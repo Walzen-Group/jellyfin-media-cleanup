@@ -133,7 +133,7 @@ class JellyfinClient:
         """
         Get every ever-watched episode with its most recent play date and name.
 
-        Returns a dict mapping Jellyfin item ID → {"last_played": ..., "item_name": ...}.
+        Returns a dict mapping Jellyfin item ID -> {"last_played": ..., "item_name": ...}.
         ItemName is kept as a fallback for episodes whose IDs can no longer be
         resolved via the /items API (e.g. after a library re-scan changes IDs).
 
@@ -195,8 +195,10 @@ class JellyfinClient:
                 headers=self._header)
             res.raise_for_status()
 
+            returned_ids: set[str] = set()
             for item in res.json().get('Items', []):
                 item_id = item.get('Id')
+                returned_ids.add(item_id)
                 series_name = item.get('SeriesName')
                 season_number = item.get('ParentIndexNumber')
                 media_sources = item.get('MediaSources', [])
@@ -224,34 +226,61 @@ class JellyfinClient:
                 if progress and task is not None:
                     progress.advance(task)
 
+            # Advance for IDs that the API didn't return (stale/deleted)
+            missing_count = len(chunk) - len(returned_ids)
+            if progress and task is not None and missing_count > 0:
+                progress.advance(task, advance=missing_count)
+
         # ----- Fallback: use ItemName from PlaybackActivity for unresolved IDs -----
         # These are episodes whose Jellyfin ID changed (library re-scan, re-add, etc.)
         # ItemName format: "Series Name - s01e05 - Episode Title"
         # We parse out the series name and season number from this.
         unresolved_ids = set(ids) - resolved_ids
-        if progress:
-            progress.console.print(
-                f"\n  [dim]Resolved {len(resolved_ids)}/{len(ids)} episodes via API, "
-                f"{len(unresolved_ids)} falling back to ItemName parsing[/dim]"
-            )
+        fallback_results: list[EpisodeInfo] = []
+        fallback_failed = 0
         if unresolved_ids:
             for item_id in unresolved_ids:
                 info = item_dates[item_id]
                 item_name = info.get('item_name', '')
                 if not item_name:
+                    fallback_failed += 1
                     continue
 
                 series_name, season_number = self._parse_episode_item_name(item_name)
                 if not series_name:
+                    fallback_failed += 1
                     continue
 
-                results.append(EpisodeInfo(
+                fallback_results.append(EpisodeInfo(
                     item_id=item_id,
                     series_name=series_name,
                     season_number=season_number,
                     file_path='',
                     last_played=info['last_played'],
                 ))
+
+        results.extend(fallback_results)
+
+        # Print resolution summary
+        if progress:
+            api_shows = len({ep.series_name for ep in results if ep.file_path})
+            api_seasons = len({(ep.series_name, ep.season_number) for ep in results if ep.file_path})
+            fb_shows = len({ep.series_name for ep in fallback_results})
+            fb_seasons = len({(ep.series_name, ep.season_number) for ep in fallback_results})
+
+            progress.console.print(
+                f"\n  [green]API resolved:[/green] {len(resolved_ids)} episodes "
+                f"-> {api_shows} shows, {api_seasons} seasons"
+            )
+            if unresolved_ids:
+                progress.console.print(
+                    f"  [yellow]Name fallback:[/yellow] {len(fallback_results)} episodes "
+                    f"-> {fb_shows} shows, {fb_seasons} seasons"
+                )
+            if fallback_failed:
+                progress.console.print(
+                    f"  [red]Unresolvable:[/red] {fallback_failed} episodes (no usable data)"
+                )
 
         return results
 

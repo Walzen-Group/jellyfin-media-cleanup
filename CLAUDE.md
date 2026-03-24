@@ -12,15 +12,24 @@ Automatic media cleanup tool for Jellyfin. Cross-references watch history from J
 # Install dependencies (uses uv)
 uv sync
 
-# Run via entry point
+# Run via entry point (all media)
 uv run media-cleanup
 
-# Or run the module directly
-uv run python src/media_cleanup/launch.py
+# Movies only or series only
+uv run media-cleanup --mode movies
+uv run media-cleanup --mode series
 
 # Run tests
 uv run pytest tests/
 ```
+
+## VS Code
+
+Launch configs in `.vscode/launch.json` — always create/update these when adding new run modes or entry points. Current configs:
+- **Media Cleanup: All** — default, runs both movies + series
+- **Media Cleanup: Movies Only** — `--mode movies`
+- **Media Cleanup: Series Only** — `--mode series`
+- **Scratchpad / Scratchpad2** — ad-hoc scripts
 
 ## Testing
 
@@ -66,4 +75,4 @@ Requires `secrets.yaml` in project root for integration tests (skipped if missin
 
 ## Dependencies
 
-Managed via `uv` with `pyproject.toml`. Dependencies: `requests`, `pyyaml`, `rapidfuzz`, `rich`. Dev: `pytest`, `pytest-recording`, `vcrpy`.
+Managed via `uv` with `pyproject.toml`. Dependencies: `requests`, `pydantic`, `pyyaml`, `rapidfuzz`, `rich`. Dev: `pytest`, `pytest-recording`, `vcrpy`.

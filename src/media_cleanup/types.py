@@ -31,6 +31,7 @@ class SeasonSummary:
     episode_count: int      # number of distinct watched episodes in this season
 
     # Filled in after matching against Sonarr
+    size_on_disk: int = 0  # bytes, from Sonarr season statistics
     matched_sonarr_path: Optional[str] = None
     match_method: Optional[str] = None   # "path" or "fuzzy"
     fuzzy_score: Optional[float] = None

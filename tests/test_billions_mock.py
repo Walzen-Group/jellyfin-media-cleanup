@@ -10,6 +10,7 @@ from unittest.mock import patch, MagicMock
 
 from media_cleanup.clients.jellyfin import JellyfinClient
 from media_cleanup.matching import build_season_summaries, match_seasons_to_sonarr
+from media_cleanup.schema.sonarr_schema import Series
 
 
 # Captured from real Jellyfin PlaybackActivity — Billions has stale IDs
@@ -27,9 +28,9 @@ BILLIONS_EPISODE_DATES = {
 
 # Captured from real Sonarr /api/v3/series — relevant entries only
 SONARR_SERIES = [
-    {"id": 10, "title": "Billions", "path": "/tv/Billions", "tags": []},
-    {"id": 20, "title": "Breaking Bad", "path": "/tv/Breaking Bad", "tags": []},
-    {"id": 30, "title": "Billion Dollar Wreck", "path": "/tv/Billion Dollar Wreck", "tags": []},
+    Series(id=10, title="Billions", path="/tv/Billions"),
+    Series(id=20, title="Breaking Bad", path="/tv/Breaking Bad"),
+    Series(id=30, title="Billion Dollar Wreck", path="/tv/Billion Dollar Wreck"),
 ]
 
 

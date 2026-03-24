@@ -54,6 +54,8 @@ class MatchResult:
     # "similar_titles"   — two different titles scored within AMBIGUITY_MARGIN of each other
     ambiguity_reason: Optional[str] = None
 
+    size_on_disk: int = 0  # bytes, from Radarr
+
     @property
     def is_matched(self) -> bool:
         return self.matched_title is not None
@@ -90,12 +92,13 @@ def match_movies_by_path(
     for jf_path in jellyfin_paths:
         found = False
         for movie in radarr_movies:
-            if movie['path'] in jf_path:
+            if movie.path in jf_path:
                 matched.append(MatchResult(
                     jellyfin_path=jf_path,
-                    matched_title=movie['title'],
-                    matched_path=movie['path'],
-                    match_method="path"
+                    matched_title=movie.title,
+                    matched_path=movie.path,
+                    match_method="path",
+                    size_on_disk=movie.size_on_disk,
                 ))
                 found = True
                 break
@@ -121,7 +124,7 @@ def fuzzy_match_movies(
 
     # Keep duplicates (e.g. two "Little Women" from different years) so they
     # surface as ambiguous — the report includes library_path to tell them apart
-    titles = [m['title'] for m in radarr_movies]
+    titles = [m.title for m in radarr_movies]
 
     return _fuzzy_match_paths(unmatched_paths, titles, radarr_movies, "Fuzzy matching movies", progress)
 
@@ -205,7 +208,7 @@ def match_seasons_to_sonarr(
         return [], seasons
 
     # Keep full list + titles (with possible duplicates) for fuzzy matching
-    sonarr_titles = [s['title'] for s in sonarr_series]
+    sonarr_titles = [s.title for s in sonarr_series]
 
     matched: list[SeasonSummary] = []
     unmatched: list[SeasonSummary] = []
@@ -219,8 +222,9 @@ def match_seasons_to_sonarr(
         #     series_name (a loose check since we only have the name from Jellyfin)
         path_match = _path_match_season(season, sonarr_series)
         if path_match:
-            season.matched_sonarr_path = path_match['path']
+            season.matched_sonarr_path = path_match.path
             season.match_method = "path"
+            season.size_on_disk = _get_season_size(path_match, season.season_number)
             matched.append(season)
             if progress and task is not None:
                 progress.advance(task)
@@ -239,16 +243,17 @@ def match_seasons_to_sonarr(
             ambiguous = [
                 {
                     "title": title,
-                    "library_path": sonarr_series[idx].get('path', ''),
+                    "library_path": sonarr_series[idx].path,
                     "score": round(score, 1),
                 }
                 for title, score, idx in top_matches[1:]
                 if score >= FUZZY_THRESHOLD and (best_score - score) <= AMBIGUITY_MARGIN
             ]
-            season.matched_sonarr_path = sonarr_series[best_idx]['path']
+            season.matched_sonarr_path = sonarr_series[best_idx].path
             season.match_method = "fuzzy"
             season.fuzzy_score = best_score
             season.ambiguous_candidates = ambiguous
+            season.size_on_disk = _get_season_size(sonarr_series[best_idx], season.season_number)
             matched.append(season)
         else:
             unmatched.append(season)
@@ -259,6 +264,15 @@ def match_seasons_to_sonarr(
     return matched, unmatched
 
 
+def _get_season_size(series: Series, season_number: int) -> int:
+    """Look up size_on_disk for a specific season from the Sonarr series object."""
+    for s in series.seasons:
+        if s.season_number == season_number:
+            return s.statistics.size_on_disk
+    # Fallback: if season not found (e.g. season_number=-1), use whole series size
+    return series.statistics.size_on_disk if season_number == -1 else 0
+
+
 def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Optional[Series]:
     """
     Try to match a season's series_name to a Sonarr series by checking
@@ -267,7 +281,7 @@ def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Op
     """
     name_lower = season.series_name.lower()
     for series in sonarr_series:
-        if series['title'].lower() in name_lower or name_lower in series['title'].lower():
+        if series.title.lower() in name_lower or name_lower in series.title.lower():
             return series
     return None
 
@@ -279,7 +293,7 @@ def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Op
 def _fuzzy_match_paths(
     unmatched_paths: list[str],
     candidate_titles: list[str],
-    candidate_items: list[dict],
+    candidate_items: list[Movie],
     description: str = "Fuzzy matching",
     progress: Progress | None = None,
 ) -> list[MatchResult]:
@@ -329,7 +343,7 @@ def _fuzzy_match_paths(
         ambiguous: list[dict[str, Any]] = [
             {
                 "title": title,
-                "library_path": candidate_items[idx].get('path', ''),
+                "library_path": candidate_items[idx].path,
                 "score": round(score, 1),
             }
             for title, score, idx in top_matches[1:]
@@ -347,11 +361,12 @@ def _fuzzy_match_paths(
         results.append(MatchResult(
             jellyfin_path=path,
             matched_title=best_title,
-            matched_path=best_item.get('path', ''),
+            matched_path=best_item.path,
             match_method="fuzzy",
             score=best_score,
             ambiguous_candidates=ambiguous,
             ambiguity_reason=ambiguity_reason,
+            size_on_disk=best_item.size_on_disk,
         ))
 
         if progress and task is not None:

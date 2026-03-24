@@ -6,9 +6,12 @@ and exposes movie metadata + file paths for matching against Jellyfin watch hist
 """
 
 import requests
-from typing import Optional
+from pydantic import TypeAdapter
 
 from media_cleanup.schema.radarr_schema import Movie, Tag
+
+_movie_list_adapter = TypeAdapter(list[Movie])
+_tag_list_adapter = TypeAdapter(list[Tag])
 
 
 class RadarrClient:
@@ -16,14 +19,14 @@ class RadarrClient:
         self.root_url = root_url
         self.api_key = api_key
         # Cache tags so we only fetch them once
-        self._tags: Optional[list[Tag]] = None
+        self._tags: list[Tag] | None = None
 
     def get_all_movies(self) -> list[Movie]:
         """Fetch every movie from Radarr."""
         res = requests.get(
             f'{self.root_url}/api/v3/movie', headers=self._header)
         res.raise_for_status()
-        return res.json()
+        return _movie_list_adapter.validate_python(res.json())
 
     def get_tags(self) -> list[Tag]:
         """Fetch all tags from Radarr. Results are cached after first call."""
@@ -31,18 +34,18 @@ class RadarrClient:
             res = requests.get(
                 f'{self.root_url}/api/v3/tag', headers=self._header)
             res.raise_for_status()
-            self._tags = res.json()
+            self._tags = _tag_list_adapter.validate_python(res.json())
         return self._tags
 
-    def get_keep_tag_id(self) -> Optional[int]:
+    def get_keep_tag_id(self) -> int | None:
         """
         Find the numeric ID of the "keep" tag.
         Returns None if no "keep" tag exists in Radarr.
         """
         tags = self.get_tags()
         for tag in tags:
-            if tag['label'].lower() == 'keep':
-                return tag['id']
+            if tag.label.lower() == 'keep':
+                return tag.id
         return None
 
     def filter_kept_movies(self, movies: list[Movie]) -> list[Movie]:
@@ -53,7 +56,7 @@ class RadarrClient:
         keep_tag_id = self.get_keep_tag_id()
         if keep_tag_id is None:
             return movies
-        return [m for m in movies if keep_tag_id not in m['tags']]
+        return [m for m in movies if keep_tag_id not in m.tags]
 
     @property
     def _header(self) -> dict[str, str]:
