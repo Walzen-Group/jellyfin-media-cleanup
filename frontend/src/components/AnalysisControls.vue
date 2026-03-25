@@ -15,21 +15,35 @@ const modeOptions = [
   { label: 'Series Only', value: 'series' },
 ]
 
+// Form state: all thresholds are in months, stored as strings for input binding
 const mode = ref<AnalysisRequest['mode']>('all')
-const monthThreshold = ref('24')
-const addedThreshold = ref('12')
-const submitting = ref(false)
-const cancelling = ref(false)
+const monthThreshold = ref('24')      // Items not watched in N months are cleanup candidates
+const addedThreshold = ref('12')      // Never-watched items added within N months are marked "new" (not deleted)
+const submitting = ref(false)         // True while the API call is in flight
+const cancelling = ref(false)         // True while the cancel request is in flight
 
+/**
+ * Request job cancellation. The cancelling flag shows a spinner until the job
+ * actually stops (detected via store.isAnalyzing watch below).
+ */
 async function cancel() {
   cancelling.value = true
   await store.cancelCurrentJob()
 }
 
+/**
+ * Reset cancelling flag once the job is no longer running.
+ * Allows the cancel button to return to normal state.
+ */
 watch(() => store.isAnalyzing, (v) => {
   if (!v) cancelling.value = false
 })
 
+/**
+ * Submit a new analysis job with form values.
+ * Converts threshold strings to numbers (with fallback defaults).
+ * Sets submitting flag while the API call is in flight.
+ */
 async function runAnalysis() {
   submitting.value = true
   try {
@@ -80,6 +94,7 @@ async function runAnalysis() {
         </div>
       </div>
 
+      <!-- State machine: not running -> show Run. Submitting -> show spinner. Running -> show Cancel. -->
       <Button
         v-if="!store.isAnalyzing && !submitting"
         label="Run Analysis"
@@ -100,6 +115,7 @@ async function runAnalysis() {
         :disabled="cancelling"
         @click="cancel"
       />
+      <!-- Clear button only shown when analysis is idle and a result exists -->
       <Button
         v-if="!store.isAnalyzing && !submitting && store.currentJob?.result"
         label="Clear"

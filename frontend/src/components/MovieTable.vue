@@ -11,6 +11,10 @@ const props = defineProps<{
   movies: MovieRow[]
 }>()
 
+/**
+ * Filter options for status column. "Recent" is excluded here since movies
+ * only have one of: recent, old, kept, unmatched, never, never_new, or collision.
+ */
 const statusOptions = [
   { label: 'Recently Watched', value: 'recent' },
   { label: 'Not Recently Watched', value: 'old' },
@@ -21,6 +25,10 @@ const statusOptions = [
   { label: 'Collision', value: 'collision' },
 ]
 
+/**
+ * Display labels for each status value.
+ * "Mixed" status doesn't appear for movies (only for series with mixed seasons).
+ */
 const statusLabels: Record<MediaStatus, string> = {
   recent: 'Recent',
   old: 'Not Recent',
@@ -32,6 +40,10 @@ const statusLabels: Record<MediaStatus, string> = {
   collision: 'Collision'
 }
 
+/**
+ * Color scheme for each status. Used in the table cells and filter dropdown.
+ * Consistent with SeriesTable colors for cross-component recognition.
+ */
 const statusColors: Record<MediaStatus, string> = {
   recent: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
   old: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
@@ -43,13 +55,21 @@ const statusColors: Record<MediaStatus, string> = {
   collision: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300',
 }
 
+/**
+ * Filter state for the DataTable. Global filter searches title and libraryPath.
+ * Status filter uses 'in' mode for multi-select (multiple statuses can be selected).
+ */
 const filters = ref<DataTableFilterMeta>({
   global: { value: null, matchMode: 'contains' },
   status: { value: [], matchMode: 'in' },
 })
 
+/**
+ * Manually compute the filtered movie count to display "N of M" summary.
+ * Replicates PrimeVue's internal filter logic. We do this because PrimeVue
+ * doesn't expose the filtered count as a reactive value.
+ */
 const filteredCount = computed(() => {
-  // Approximate — PrimeVue handles actual filtering internally
   let result = props.movies
   const statusVal = (filters.value.status as { value: string[] }).value
   if (statusVal.length) {
@@ -120,6 +140,7 @@ const filteredCount = computed(() => {
           </MultiSelect>
         </template>
       </Column>
+      <!-- How the movie was matched: "path" (file path match), "fuzzy" (title similarity), or null for unmatched -->
       <Column field="matchMethod" header="Match" sortable style="width: 110px">
         <template #body="{ data }">
           <span class="text-xs text-surface-500">{{ data.matchMethod ?? 'unmatched' }}</span>

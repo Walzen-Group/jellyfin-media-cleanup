@@ -1,7 +1,21 @@
+/**
+ * Request to start a new analysis job.
+ * Mode: which media types to analyze. Thresholds in months.
+ * Note: These TypeScript field names match the camelCase returned by the Python API
+ * (Python uses snake_case internally but aliases to camelCase via Pydantic).
+ */
+/**
+ * All types in this file use camelCase to match the API responses.
+ * The Python backend uses Pydantic with alias_generator=to_camel, so:
+ * - Python field: job_id
+ * - JSON field: jobId
+ * - TypeScript field: jobId (matches JSON directly, no conversion needed)
+ */
+
 export interface AnalysisRequest {
   mode: 'all' | 'movies' | 'series'
-  monthThreshold: number
-  addedThreshold: number
+  monthThreshold: number        // Items not watched in N months are cleanup candidates
+  addedThreshold: number        // Never-watched items added within N months are "new" (not deleted)
 }
 
 export interface JobResponse {
@@ -54,18 +68,27 @@ export interface MediaSection {
   series: SeriesGroup[]
 }
 
+/**
+ * Counts and sizes for a single watch category (e.g., recently watched, never watched).
+ * Both raw byte counts and formatted strings (e.g., "1.2 TB") are provided.
+ */
 export interface CategoryStats {
   movieCount: number
   showsCount: number
   seasonsCount: number
-  totalSize: number
-  movieSize: number
-  seriesSize: number
-  totalSizeFmt: string
+  totalSize: number            // bytes
+  movieSize: number            // bytes
+  seriesSize: number           // bytes
+  totalSizeFmt: string         // formatted e.g. "1.2 TB"
   movieSizeFmt: string
   seriesSizeFmt: string
 }
 
+/**
+ * Counts for match quality across all categories.
+ * Matched = successfully found in library. Ambiguous = multiple candidates close in score.
+ * Unmatched = no library entry found. Collision = multiple Jellyfin entries map to one library item.
+ */
 export interface MatchingStats {
   matchedMovieCount: number
   matchedShowsCount: number
@@ -80,39 +103,55 @@ export interface MatchingStats {
   collisionSeasonCount: number
 }
 
+/**
+ * Episode resolution stats. Used for monitoring matching quality.
+ */
 export interface EpisodeStats {
-  skipped: number
-  fallback: number
+  skipped: number              // Jellyfin episodes with stale IDs (couldn't resolve)
+  fallback: number             // Episodes resolved via ItemName parsing (not API call)
 }
 
+/**
+ * Estimated disk space that could be saved by deleting old/unmatched media.
+ */
 export interface SpaceSavings {
-  seasonsOnlySize: number
-  entireShowsSize: number
+  seasonsOnlySize: number      // bytes: old movies + old seasons
+  entireShowsSize: number      // bytes: old movies + entire series where all seasons are old
   seasonsOnlySizeFmt: string
   entireShowsSizeFmt: string
 }
 
+/**
+ * Aggregated statistics from a completed analysis.
+ * Contains counts and sizes per watch category, matching quality, episode resolution, and savings estimate.
+ * Used by SummaryPanel to display the overview table.
+ */
 export interface Summary {
-  recent: CategoryStats
-  old: CategoryStats
-  neverWatched: CategoryStats
-  neverNew: CategoryStats
-  library: CategoryStats
-  kept: CategoryStats
-  matching: MatchingStats
-  episodes: EpisodeStats
-  spaceSavings: SpaceSavings
+  recent: CategoryStats        // Watched within threshold
+  old: CategoryStats           // Not watched within threshold (cleanup candidate)
+  neverWatched: CategoryStats  // Never watched (old)
+  neverNew: CategoryStats      // Never watched (recently added)
+  library: CategoryStats       // All items in library
+  kept: CategoryStats          // Items tagged to keep
+  matching: MatchingStats      // Match quality breakdown
+  episodes: EpisodeStats       // Episode resolution quality
+  spaceSavings: SpaceSavings   // Estimated cleanup savings
 }
 
+/**
+ * Complete analysis result from a finished job.
+ * Seven MediaSection categories (each with movies and series), plus summary stats.
+ * Backend categorizes; frontend flattens allMovies/allSeries for unified table display.
+ */
 export interface AnalysisResult {
-  recentlyWatched: MediaSection
-  notRecentlyWatched: MediaSection
-  keep: MediaSection
-  collision: MediaSection
-  unmatched: MediaSection
-  neverWatched: MediaSection
-  neverNew: MediaSection
-  summary: Summary
+  recentlyWatched: MediaSection  // Watched within threshold (keep)
+  notRecentlyWatched: MediaSection  // Not watched within threshold (cleanup candidate)
+  keep: MediaSection              // Tagged to keep (don't delete)
+  collision: MediaSection         // Multiple Jellyfin entries map to one library item (ambiguous)
+  unmatched: MediaSection         // No matching library entry found (ambiguous)
+  neverWatched: MediaSection      // Never watched (old; cleanup candidate)
+  neverNew: MediaSection          // Never watched (recently added; keep)
+  summary: Summary                // Aggregated statistics
 }
 
 export interface FullJobResponse extends JobResponse {

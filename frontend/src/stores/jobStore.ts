@@ -6,6 +6,10 @@ import type {
 } from '../types/api'
 import { useApi } from '../composables/useApi'
 
+/**
+ * Tag movies with a status value. Used to flatten the categorized API response
+ * into a single array where the status column can be filtered/sorted.
+ */
 function tagMovies(movies: { title: string }[], status: MediaStatus): MovieRow[] {
   return movies.map(m => ({ ...m, status }) as MovieRow)
 }
@@ -24,6 +28,12 @@ export const useJobStore = defineStore('job', () => {
     return s === 'queued' || s === 'running'
   })
 
+  /**
+   * Flatten categorized movies into a single array with status tags.
+   * Allows tables to filter/sort by a single status column instead of having
+   * separate tables per category. The backend categorizes for summaries and
+   * the YAML report; the frontend flattens for unified table display.
+   */
   const allMovies = computed<MovieRow[]>(() => {
     const r = currentJob.value?.result
     if (!r) return []
@@ -38,6 +48,12 @@ export const useJobStore = defineStore('job', () => {
     ]
   })
 
+  /**
+   * Flatten categorized series into a single array and add a computed totalEpisodes field.
+   * One SeriesGroup per show (not per season) from the backend. Compute totalEpisodes by
+   * summing across all seasons to display in the table. The backend already merges all
+   * seasons for each show and derives a show-level status (e.g. "mixed" if seasons differ).
+   */
   const allSeries = computed<SeriesRow[]>(() => {
     const r = currentJob.value?.result
     if (!r) return []
@@ -113,6 +129,11 @@ export const useJobStore = defineStore('job', () => {
     }
   }
 
+  /**
+   * Ensure currentJob is set to the given jobId (create if needed).
+   * Used by WebSocket message handlers to guarantee currentJob exists
+   * before updating its fields. Returns the (now current) job object.
+   */
   function ensureCurrentJob(jobId: string): FullJobResponse {
     if (currentJob.value?.jobId !== jobId) {
       currentJob.value = {
@@ -130,13 +151,20 @@ export const useJobStore = defineStore('job', () => {
     return currentJob.value!
   }
 
+  /**
+   * Handle WebSocket messages from the backend. Updates currentJob state based on
+   * the message type. On job_complete, fetches the full result (with AnalysisResult).
+   * For progress messages, updates the progress bar fields in real time.
+   */
   function handleWebSocketMessage(msg: WebSocketMessage) {
     switch (msg.type) {
       case 'job_created':
+        // Add to jobs list (prepend for recency) and make it current
         jobs.value = [msg.job, ...jobs.value]
         ensureCurrentJob(msg.job.jobId)
         break
       case 'job_progress': {
+        // Update current job with live progress data (no result yet)
         const job = ensureCurrentJob(msg.jobId)
         job.status = 'running'
         job.progressPercent = msg.percent
@@ -146,22 +174,25 @@ export const useJobStore = defineStore('job', () => {
         break
       }
       case 'job_complete': {
+        // Mark as complete and fetch full result (which includes AnalysisResult)
         const job = ensureCurrentJob(msg.jobId)
         job.progressPercent = 100
         job.completedAt = new Date().toISOString()
         error.value = null
         loading.value = true
         job.status = 'complete'
-        fetchJobResult(msg.jobId)
+        fetchJobResult(msg.jobId)  // Loads job.result with AnalysisResult
         break
       }
       case 'job_cancelled':
+        // Update current job if it matches
         if (currentJob.value?.jobId === msg.jobId) {
           currentJob.value.status = 'cancelled'
           error.value = 'Analysis cancelled'
         }
         break
       case 'job_failed':
+        // Update current job with error details
         if (currentJob.value?.jobId === msg.jobId) {
           currentJob.value.status = 'failed'
           currentJob.value.error = msg.error

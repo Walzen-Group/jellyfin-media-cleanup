@@ -5,21 +5,36 @@ const props = defineProps<{
   summary: Summary
 }>()
 
+/**
+ * Format number with thousands separators.
+ */
 function n(val: number): string {
   return val.toLocaleString()
 }
 
+/**
+ * Display a size string, or '-' if empty.
+ */
 function fmt(val: string): string {
   return val || '-'
 }
 
+/**
+ * Table row model. Used to build rows dynamically.
+ * Movies, shows, seasons, and sizes are optional to handle separator rows.
+ */
 type Row = {
   label: string
   movies?: string; shows?: string; seasons?: string
   movieSize?: string; seriesSize?: string
-  cls: string; sep?: boolean
+  cls: string;         // Tailwind color class for the row
+  sep?: boolean        // If true, render as separator line instead of data row
 }
 
+/**
+ * Create a data row from a CategoryStats object (e.g. "Recently watched", "Never watched").
+ * Formats counts and sizes for display. showSeasons=false hides season count for never-watched.
+ */
 function catRow(label: string, cat: CategoryStats, cls: string, showSeasons = true): Row {
   return {
     label,
@@ -32,6 +47,10 @@ function catRow(label: string, cat: CategoryStats, cls: string, showSeasons = tr
   }
 }
 
+/**
+ * Create a data row from MatchingStats counters (e.g. "Matched", "Ambiguous").
+ * Takes property keys (movieKey, showsKey, seasonsKey) to pull specific counts.
+ */
 function matchRow(label: string, movieKey: keyof MatchingStats, showsKey: keyof MatchingStats, seasonsKey: keyof MatchingStats, cls: string): Row {
   return {
     label,
@@ -42,15 +61,23 @@ function matchRow(label: string, movieKey: keyof MatchingStats, showsKey: keyof 
   }
 }
 
+/**
+ * Summary table structure: watch categories, then library totals, then matching quality metrics.
+ * catRow() pulls counts/sizes from each category. matchRow() pulls matching stats.
+ * Separator rows ({ sep: true }) are rendered as a border line in the template.
+ */
 const rows: Row[] = [
+  // Watch categories (what was actually watched)
   catRow('Recently watched', props.summary.recent, 'text-green-500 dark:text-green-400'),
   catRow('Not recently watched', props.summary.old, 'text-red-500 dark:text-red-400'),
   catRow('Never watched', props.summary.neverWatched, 'text-purple-500 dark:text-purple-400', false),
   catRow('New (unwatched)', props.summary.neverNew, 'text-cyan-500 dark:text-cyan-400', false),
   { label: '', sep: true, cls: '' },
+  // Overall library and kept items
   catRow('Library total', props.summary.library, 'text-surface-400', false),
   catRow('Kept', props.summary.kept, 'text-yellow-500 dark:text-yellow-400'),
   { label: '', sep: true, cls: '' },
+  // Matching quality (how well items were matched to the library)
   matchRow('Matched', 'matchedMovieCount', 'matchedShowsCount', 'matchedSeasonsCount', 'text-green-500 dark:text-green-400'),
   matchRow('Ambiguous', 'ambiguousMovieCount', 'ambiguousShowsCount', 'ambiguousSeasonsCount', 'text-yellow-500 dark:text-yellow-400'),
   {

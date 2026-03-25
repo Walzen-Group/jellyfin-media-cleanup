@@ -8,6 +8,10 @@ import App from './App.vue'
 import 'primeicons/primeicons.css'
 import './style.css'
 
+/**
+ * Custom PrimeVue theme: Aura base with indigo as primary color.
+ * Respects system dark mode via .dark class on root element.
+ */
 const WediaPreset = definePreset(Aura, {
   semantic: {
     primary: {

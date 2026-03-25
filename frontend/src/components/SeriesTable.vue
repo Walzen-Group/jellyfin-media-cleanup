@@ -47,17 +47,28 @@ const statusColors: Record<MediaStatus, string> = {
   collision: 'bg-fuchsia-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
 }
 
+/**
+ * Filter state for the DataTable. Global filter uses 'contains', status uses 'in' (multi-select).
+ * Note: PrimeVue doesn't expose filtered row count as a reactive value, so we compute
+ * filteredCount manually by replicating the filter logic.
+ */
 const filters = ref<DataTableFilterMeta>({
   global: { value: null, matchMode: 'contains' },
   status: { value: [], matchMode: 'in' },
 })
 
+/**
+ * Manually compute the filtered row count to display "N of M" summary.
+ * Applies both status filter (if selected) and global search filter.
+ */
 const filteredCount = computed(() => {
   let result = props.series
+  // Apply status multi-select filter
   const statusVal = (filters.value.status as { value: string[] }).value
   if (statusVal.length) {
     result = result.filter(s => statusVal.includes(s.status))
   }
+  // Apply global search filter (title and libraryPath)
   const globalVal = (filters.value.global as { value: string | null }).value
   if (globalVal) {
     const q = globalVal.toLowerCase()
@@ -153,14 +164,17 @@ const filteredCount = computed(() => {
         </template>
       </Column>
 
+      <!-- Expandable row: shows all seasons for this series, collision details (if any), and library path -->
       <template #expansion="{ data }">
         <div class="pl-10 pr-4 py-2">
+          <!-- Season breakdown table: watch status, available/on-disk, last played, episode counts, sizes -->
           <DataTable :value="data.seasons" size="small" tableClass="text-xs" tableStyle="table-layout: fixed">
             <Column field="seasonNumber" header="Season" sortable>
               <template #body="{ data: s }">
                 S{{ String(s.seasonNumber).padStart(2, '0') }}
               </template>
             </Column>
+            <!-- Color dot indicates season watch status -->
             <Column header="Recent">
               <template #body="{ data: s }">
                 <span
@@ -169,6 +183,7 @@ const filteredCount = computed(() => {
                 />
               </template>
             </Column>
+            <!-- Shows whether season files are on disk (sizeBytes > 0) -->
             <Column header="Available">
               <template #body="{ data: s }">
                 <span class="text-xs" :class="s.sizeBytes > 0 ? 'text-emerald-500' : 'text-surface-400'">
@@ -176,6 +191,7 @@ const filteredCount = computed(() => {
                 </span>
               </template>
             </Column>
+            <!-- For never-watched shows, display 'Added' date; for watched shows, display 'Last Played' date -->
             <Column field="lastPlayed" :header="data.status === 'never' || data.status === 'never_new' ? 'Added' : 'Last Played'" sortable>
               <template #body="{ data: s }">
                 {{ s.lastPlayed ? formatDate(s.lastPlayed) : (data.added ? formatDate(data.added) : '–') }}
@@ -192,6 +208,7 @@ const filteredCount = computed(() => {
               </template>
             </Column>
           </DataTable>
+          <!-- Collision info: displayed when multiple Jellyfin series names mapped to the same library path -->
           <div v-if="data.collidingNames?.length" class="mt-2 px-3 py-2 rounded bg-fuchsia-50 dark:bg-fuchsia-950/30 border border-fuchsia-200 dark:border-fuchsia-800">
             <span class="text-xs font-medium text-fuchsia-700 dark:text-fuchsia-300">Collision: </span>
             <span class="text-xs text-fuchsia-600 dark:text-fuchsia-400">
@@ -201,6 +218,7 @@ const filteredCount = computed(() => {
               <li v-for="name in data.collidingNames" :key="name">{{ name }}</li>
             </ul>
           </div>
+          <!-- Library path (Sonarr directory) for reference -->
           <div v-if="data.libraryPath" class="mt-2 text-xs text-surface-500 font-mono">
             {{ data.libraryPath }}
           </div>

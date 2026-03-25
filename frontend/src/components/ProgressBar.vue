@@ -4,11 +4,12 @@ import PrimeProgressBar from 'primevue/progressbar'
 
 defineProps<{
   percent: number
-  step: string
-  stepIndex?: number
-  totalSteps?: number
+  step: string         // e.g. "Matching movies: 42/100" or "Matching movies"
+  stepIndex?: number   // Current step number (e.g., 3 of 8)
+  totalSteps?: number  // Total steps in the pipeline (e.g., 8)
 }>()
 
+// Whimsical status messages that cycle every 3s for entertainment during long runs
 const vibes = [
   'cringlebingling...',
   'defragulating...',
@@ -46,15 +47,19 @@ onUnmounted(() => clearInterval(timer))
   <div class="space-y-1.5">
     <div class="flex justify-between text-sm text-surface-500">
       <span>
+        <!-- Split step name on first ':' to separate main step from subtext (e.g. "Matching movies" from "42/100") -->
         {{ step.split(':')[0] }}
         <span v-if="step.includes(':')" class="text-surface-400">: {{ step.split(':').slice(1).join(':').trim() }}</span>
       </span>
       <span class="tabular-nums">
         {{ Math.round(percent) }}%
+        <!-- Show pipeline progress (e.g. "3/8") only if both step index and total are provided -->
         <span v-if="stepIndex && totalSteps" class="text-surface-400 ml-1.5">({{ stepIndex }}/{{ totalSteps }})</span>
+        <!-- Whimsical message that cycles periodically -->
         <span class="text-surface-400 ml-2 italic font-normal">{{ currentVibe }}</span>
       </span>
     </div>
+    <!-- Animated striped progress bar (capped at 100%) -->
     <PrimeProgressBar :value="Math.min(Math.round(percent), 100)" :showValue="false" style="height: 20px" class="striped-progress" />
   </div>
 </template>
