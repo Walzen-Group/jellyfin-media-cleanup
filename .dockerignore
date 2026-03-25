@@ -1,7 +1,9 @@
+# Exclude heavy .git dirs but keep HEAD, refs, and packed-refs for version hash
 .git/objects
 .git/hooks
 .git/logs
 .git/info
+.git/modules
 .vscode
 .venv
 __pycache__
