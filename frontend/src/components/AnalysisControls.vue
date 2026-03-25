@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, inject, type Ref } from 'vue'
 import { useJobStore } from '../stores/jobStore'
 import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
@@ -8,6 +8,8 @@ import ProgressBar from './ProgressBar.vue'
 import type { AnalysisRequest } from '../types/api'
 
 const store = useJobStore()
+// Injected from App.vue; prevents starting analysis without a live WebSocket connection
+const wsConnected = inject<Ref<boolean>>('wsConnected', ref(false))
 
 const modeOptions = [
   { label: 'All', value: 'all' },
@@ -23,21 +25,26 @@ const submitting = ref(false)         // True while the API call is in flight
 const cancelling = ref(false)         // True while the cancel request is in flight
 
 /**
- * Request job cancellation. The cancelling flag shows a spinner until the job
- * actually stops (detected via store.isAnalyzing watch below).
+ * Request job cancellation. Uses try/finally to guarantee the spinner resets
+ * once the HTTP request completes, regardless of outcome. The button itself
+ * disappears naturally when the WS confirms the job stopped (isAnalyzing → false).
+ * Avoided using a watch for this because Vue's pre-flush order can fire it in
+ * the same cycle as cancelling=true, resetting the flag before the DOM updates.
  */
 async function cancel() {
   cancelling.value = true
-  await store.cancelCurrentJob()
+  const showUntil = Date.now() + 1500
+  try {
+    await store.cancelCurrentJob()
+  } finally {
+    // Keep "Cancelling..." visible for at least 1.5s total
+    const remaining = showUntil - Date.now()
+    if (remaining > 0) {
+      await new Promise(resolve => setTimeout(resolve, remaining))
+    }
+    cancelling.value = false
+  }
 }
-
-/**
- * Reset cancelling flag once the job is no longer running.
- * Allows the cancel button to return to normal state.
- */
-watch(() => store.isAnalyzing, (v) => {
-  if (!v) cancelling.value = false
-})
 
 /**
  * Submit a new analysis job with form values.
@@ -94,11 +101,13 @@ async function runAnalysis() {
         </div>
       </div>
 
-      <!-- State machine: not running -> show Run. Submitting -> show spinner. Running -> show Cancel. -->
+      <!-- State machine: not running -> show Run (disabled if WS not connected). Submitting -> show spinner. Running -> show Cancel. -->
       <Button
         v-if="!store.isAnalyzing && !submitting"
         label="Run Analysis"
         icon="pi pi-play"
+        :disabled="!wsConnected"
+        v-tooltip="!wsConnected ? 'Waiting for WebSocket connection...' : undefined"
         @click="runAnalysis"
       />
       <Button

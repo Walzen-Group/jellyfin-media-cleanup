@@ -3,12 +3,6 @@ services:
     build: .
     ports:
       - "8000:8000"
-    environment:
-      JELLYFIN_URL: "http://jellyfin:8096"
-      JELLYFIN_API_KEY: "your-jellyfin-api-key"
-      SONARR_URL: "http://sonarr:8989"
-      SONARR_API_KEY: "your-sonarr-api-key"
-      RADARR_URL: "http://radarr:7878"
-      RADARR_API_KEY: "your-radarr-api-key"
-      MONTH_THRESHOLD: "6"
+    env_file:
+      - secrets.env
     restart: unless-stopped

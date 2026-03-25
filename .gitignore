@@ -7,6 +7,7 @@ cleanup_report.yaml
 
 # secrets
 secrets.yaml
+secrets.env
 .env
 scratchpad*.py
 

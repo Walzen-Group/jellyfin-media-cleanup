@@ -79,7 +79,8 @@ export const useJobStore = defineStore('job', () => {
       const [job] = await Promise.all([api.getCurrentJob(), minDelay])
       if (job) {
         currentJob.value = job
-        error.value = null
+        // Restore error message if the job had already failed (e.g. page reload after failure)
+        error.value = job.status === 'failed' && job.error ? job.error : null
       }
     } finally {
       loading.value = false
@@ -93,16 +94,21 @@ export const useJobStore = defineStore('job', () => {
     monthThreshold.value = request.monthThreshold
     try {
       const { jobId } = await api.postAnalysis(request)
-      currentJob.value = {
-        jobId,
-        status: 'queued',
-        progressPercent: 0,
-        progressStep: 'Queued',
-        stepIndex: 0,
-        totalSteps: 0,
-        createdAt: new Date().toISOString(),
-        completedAt: null,
-        error: null,
+      // Only initialize if WS hasn't already received and processed messages for this job.
+      // Fast failures (e.g. bad API key) can cause job_failed to arrive before the HTTP
+      // response resolves, and unconditionally overwriting here would bury the error.
+      if (currentJob.value?.jobId !== jobId) {
+        currentJob.value = {
+          jobId,
+          status: 'queued',
+          progressPercent: 0,
+          progressStep: 'Queued',
+          stepIndex: 0,
+          totalSteps: 0,
+          createdAt: new Date().toISOString(),
+          completedAt: null,
+          error: null,
+        }
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to start analysis'
@@ -115,6 +121,9 @@ export const useJobStore = defineStore('job', () => {
       await api.cancelJob(currentJob.value.jobId)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to cancel job'
+      // Force a non-analyzing status so isAnalyzing goes false and the cancel
+      // button unsticks (e.g. when the job no longer exists on the server).
+      if (currentJob.value) currentJob.value.status = 'cancelled'
     }
   }
 

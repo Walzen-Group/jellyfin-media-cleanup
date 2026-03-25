@@ -19,6 +19,9 @@ from media_cleanup.types import EpisodeInfo
 # Generic progress callback: (step_name, current, total)
 ProgressCallback = Callable[[str, int, int], None]
 
+# Optional cancel check: return True to abort between chunks
+CancelCheck = Callable[[], bool]
+
 
 # ------------------------------------------------------------------ #
 #  API response schemas
@@ -164,6 +167,7 @@ class JellyfinClient:
         self,
         item_dates: dict[str, dict[str, str]],
         progress_callback: ProgressCallback | None = None,
+        cancel_check: CancelCheck | None = None,
     ) -> list[EpisodeInfo]:
         """
         Resolve a dict of {item_id: {"last_played": ..., "item_name": ...}}
@@ -185,6 +189,9 @@ class JellyfinClient:
         resolved_count = 0
 
         for i in chunks:
+            if cancel_check and cancel_check():
+                from media_cleanup.service import CancellationError
+                raise CancellationError("Pipeline cancelled by caller")
             chunk = ids[i:i + self.chunk_length]
             res = re.get(
                 f'{self.root_url}/items'
@@ -283,6 +290,7 @@ class JellyfinClient:
         ids: list[str],
         progress_callback: ProgressCallback | None = None,
         desc: str = "Resolving file paths",
+        cancel_check: CancelCheck | None = None,
     ) -> list[str]:
         """
         Resolve a list of Jellyfin item IDs to their on-disk file paths.
@@ -298,6 +306,9 @@ class JellyfinClient:
         cb = progress_callback or (lambda *_: None)
 
         for idx, i in enumerate(chunks):
+            if cancel_check and cancel_check():
+                from media_cleanup.service import CancellationError
+                raise CancellationError("Pipeline cancelled by caller")
             results.extend(
                 self._get_file_paths_for_chunk_length(ids[i:i + self.chunk_length]))
             cb(desc, idx + 1, len(chunks))

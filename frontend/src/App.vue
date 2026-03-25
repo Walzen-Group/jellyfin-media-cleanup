@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { provide } from 'vue'
 import { useJobStore } from './stores/jobStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWebSocket } from './composables/useWebSocket'
@@ -9,6 +10,9 @@ useThemeStore()
 const store = useJobStore()
 const { isConnected, onMessage } = useWebSocket()
 onMessage((msg) => store.handleWebSocketMessage(msg))
+
+// Provide WebSocket connection state so child components can disable actions when disconnected
+provide('wsConnected', isConnected)
 </script>
 
 <template>

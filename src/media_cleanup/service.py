@@ -127,6 +127,7 @@ class CleanupService:
                 recent_movie_ids + old_movie_ids,
                 progress_callback=lambda s, c, t: cb("Resolving movie paths", c, t),
                 desc="Resolving movie paths",
+                cancel_check=cancel_check,
             )
             recent_movie_paths = all_movie_paths[:len(recent_movie_ids)]
             old_movie_paths = all_movie_paths[len(recent_movie_ids):]
@@ -199,7 +200,8 @@ class CleanupService:
 
             # Episode resolution is the heaviest step — callback goes through
             # the global progress wrapper via the "Resolving episodes" base name
-            result.episodes = jellyfin.get_episode_metadata(result.episode_dates, progress_callback=cb)
+            result.episodes = jellyfin.get_episode_metadata(
+                result.episode_dates, progress_callback=cb, cancel_check=cancel_check)
 
             self._check_cancel(cancel_check)
 

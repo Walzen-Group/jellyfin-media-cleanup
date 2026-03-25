@@ -54,12 +54,15 @@ def create_app() -> FastAPI:
     # WebSocket endpoint
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket) -> None:
+        logger.info("WebSocket connection request from %s", ws.client)
         await ws_manager.connect(ws)
+        logger.info("WebSocket client connected: %s", ws.client)
         try:
             # Keep the connection open; client can send pings
             while True:
                 await ws.receive_text()
         except WebSocketDisconnect:
+            logger.info("WebSocket client disconnected: %s", ws.client)
             ws_manager.disconnect(ws)
 
     # Serve frontend static files if the build directory exists

@@ -176,8 +176,15 @@ All secrets (Jellyfin URL/token, Sonarr/Radarr URL/key) are passed as environmen
 - All clients take `root_url` and `api_key` in constructor; credentials come from `secrets.yaml` (gitignored) or environment variables.
 - Clients use `requests` library directly with `raise_for_status()` for error handling.
 - Rich library used for CLI progress bars (spinner, bar, ETA) and summary table.
-- Pydantic v2 with `alias_generator=to_camel` for all API-facing models — Python snake_case, JSON camelCase.
+- Pydantic v2 with `alias_generator=to_camel` for all API-facing models -- Python snake_case, JSON camelCase.
 - `ProgressCallback = Callable[[str, int, int], None]` threading throughout service/matching (no Rich dependency in matching layer).
+- `CancelCheck = Callable[[], bool]` is passed into long-running chunked operations (`get_episode_metadata`, `get_file_paths`) so cancellation is responsive even mid-step, not just between pipeline steps.
+- WebSocket connection uses a grace period (2s retries for the first 10s) then exponential backoff (capped at 30s). A 5s handshake timeout prevents stuck connections (Docker Desktop on Windows has slow WebSocket upgrades).
+- The Run Analysis button is disabled when WebSocket is not connected (`wsConnected` is provided from App.vue via provide/inject).
+- Cancellation UI shows "Cancelling..." for a minimum of 1.5s so the user always sees feedback, even if the API responds instantly.
+- Frontend async state flags (submitting, cancelling, loading) use `try/finally` for resets, not Vue watchers. Watchers can fire during Vue's pre-flush cycle and reset flags before the DOM updates, making spinners invisible.
+- `startAnalysis` in the job store guards against overwriting `currentJob` if WebSocket messages have already updated it (race condition where `job_failed` arrives before the HTTP 202 response).
+- Docker secrets are passed via `secrets.env` file (see `secrets.example.env`). Never committed to git.
 
 ## Dependencies
 
