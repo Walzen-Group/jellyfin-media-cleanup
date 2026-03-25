@@ -10,6 +10,8 @@ dependencies = [
     "rapidfuzz",
     "rich>=14.3.3",
     "pydantic>=2.12.5",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [build-system]
@@ -28,3 +30,4 @@ dev = [
 
 [project.scripts]
 media-cleanup = "media_cleanup.launch:run"
+media-cleanup-server = "media_cleanup.server.app:main"

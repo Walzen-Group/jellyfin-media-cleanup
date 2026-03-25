@@ -4,7 +4,8 @@
       "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
       "Bash(uv:*)",
       "mcp__plugin_context-mode_context-mode__ctx_doctor",
-      "mcp__plugin_context-mode_context-mode__ctx_stats"
+      "mcp__plugin_context-mode_context-mode__ctx_stats",
+      "Bash(pnpm run:*)"
     ]
   }
 }

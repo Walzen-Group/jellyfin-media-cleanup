@@ -29,6 +29,8 @@ Launch configs in `.vscode/launch.json` — always create/update these when addi
 - **Media Cleanup: All** — default, runs both movies + series
 - **Media Cleanup: Movies Only** — `--mode movies`
 - **Media Cleanup: Series Only** — `--mode series`
+- **Media Cleanup: Server** — FastAPI backend with uvicorn (port 8000, auto-reload)
+- **Frontend: Dev Server** — Vite dev server for Vue frontend
 - **Scratchpad / Scratchpad2** — ad-hoc scripts
 
 ## Testing

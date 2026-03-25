@@ -78,7 +78,7 @@ def test_billions_matched_from_jellyfin_to_sonarr():
 
     # Step 4: Fetch Sonarr library (without keep filter — we want to verify matching works)
     all_series = sonarr.get_all_series()
-    sonarr_billions = [s for s in all_series if "Billions" in s['title']]
+    sonarr_billions = [s for s in all_series if "Billions" in s.title]
     assert len(sonarr_billions) > 0, "Billions not found in Sonarr library"
 
     # Step 5: Match seasons to Sonarr — THE CRITICAL ASSERTION

@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Align PrimeVue surfaces with our Tailwind gray palette */
+:root {
+  --p-surface-0: #ffffff;
+  --p-surface-50: #f9fafb;
+  --p-surface-100: #f3f4f6;
+  --p-surface-200: #e5e7eb;
+  --p-surface-300: #d1d5db;
+  --p-surface-400: #9ca3af;
+  --p-surface-500: #6b7280;
+  --p-surface-600: #4b5563;
+  --p-surface-700: #374151;
+  --p-surface-800: #1f2937;
+  --p-surface-900: #111827;
+  --p-surface-950: #030712;
+  --p-text-color: #111827;
+  --p-content-background: #ffffff;
+}
+
+.dark {
+  --p-text-color: #f3f4f6;
+  --p-content-background: #1f2937;
+}
+
+/* Consistent card styling using PrimeVue surface tokens */
+.card {
+  @apply rounded-lg shadow-sm border;
+  background: var(--p-surface-0);
+  border-color: var(--p-surface-200);
+}
+.dark .card {
+  background: var(--p-surface-900);
+  border-color: var(--p-surface-700);
+  box-shadow: none;
+}
+
+/* Slightly more space between filter dropdown and buttons */
+[data-pc-section="filterbuttonbar"] {
+  padding-top: 0.5rem !important;
+}
+

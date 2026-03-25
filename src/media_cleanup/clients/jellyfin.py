@@ -12,10 +12,12 @@ and grouped at the season level by the matching module.
 """
 
 import requests as re
-from typing import TypedDict
-from rich.progress import Progress
+from typing import Callable, TypedDict
 
 from media_cleanup.types import EpisodeInfo
+
+# Generic progress callback: (step_name, current, total)
+ProgressCallback = Callable[[str, int, int], None]
 
 
 # ------------------------------------------------------------------ #
@@ -161,7 +163,7 @@ class JellyfinClient:
     def get_episode_metadata(
         self,
         item_dates: dict[str, dict[str, str]],
-        progress: Progress | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> list[EpisodeInfo]:
         """
         Resolve a dict of {item_id: {"last_played": ..., "item_name": ...}}
@@ -179,12 +181,8 @@ class JellyfinClient:
         chunks = list(range(0, len(ids), self.chunk_length))
         results: list[EpisodeInfo] = []
         resolved_ids: set[str] = set()
-
-        task = None
-        if progress and ids:
-            # Track by individual item so the ETA is meaningful and the
-            # description can show the current show being processed
-            task = progress.add_task("Resolving episode metadata", total=len(ids))
+        cb = progress_callback or (lambda *_: None)
+        resolved_count = 0
 
         for i in chunks:
             chunk = ids[i:i + self.chunk_length]
@@ -203,15 +201,11 @@ class JellyfinClient:
                 season_number = item.get('ParentIndexNumber')
                 media_sources = item.get('MediaSources', [])
 
-                # Update description with current show so user can see progress
-                if progress and task is not None and series_name:
-                    progress.update(task, description=f"[bold blue]Resolving episodes:[/bold blue] {series_name}")
-
                 # Skip episodes missing required metadata — they'll be handled
                 # in the fallback pass below
                 if not series_name or season_number is None or not media_sources:
-                    if progress and task is not None:
-                        progress.advance(task)
+                    resolved_count += 1
+                    cb(f"Resolving episodes", resolved_count, len(ids))
                     continue
 
                 resolved_ids.add(item_id)
@@ -223,22 +217,22 @@ class JellyfinClient:
                     last_played=item_dates[item_id]['last_played'],
                 ))
 
-                if progress and task is not None:
-                    progress.advance(task)
+                resolved_count += 1
+                # Emit the current show name so callers can display it
+                cb(f"Resolving episodes: {series_name}", resolved_count, len(ids))
 
             # Advance for IDs that the API didn't return (stale/deleted)
             missing_count = len(chunk) - len(returned_ids)
-            if progress and task is not None and missing_count > 0:
-                progress.advance(task, advance=missing_count)
+            if missing_count > 0:
+                resolved_count += missing_count
+                cb(f"Resolving episodes", resolved_count, len(ids))
 
         # ----- Fallback: use ItemName from PlaybackActivity for unresolved IDs -----
-        # These are episodes whose Jellyfin ID changed (library re-scan, re-add, etc.)
-        # ItemName format: "Series Name - s01e05 - Episode Title"
-        # We parse out the series name and season number from this.
         unresolved_ids = set(ids) - resolved_ids
         fallback_results: list[EpisodeInfo] = []
         fallback_failed = 0
         if unresolved_ids:
+            cb("Resolving episodes: name fallback", resolved_count, len(ids))
             for item_id in unresolved_ids:
                 info = item_dates[item_id]
                 item_name = info.get('item_name', '')
@@ -260,27 +254,7 @@ class JellyfinClient:
                 ))
 
         results.extend(fallback_results)
-
-        # Print resolution summary
-        if progress:
-            api_shows = len({ep.series_name for ep in results if ep.file_path})
-            api_seasons = len({(ep.series_name, ep.season_number) for ep in results if ep.file_path})
-            fb_shows = len({ep.series_name for ep in fallback_results})
-            fb_seasons = len({(ep.series_name, ep.season_number) for ep in fallback_results})
-
-            progress.console.print(
-                f"\n  [green]API resolved:[/green] {len(resolved_ids)} episodes "
-                f"-> {api_shows} shows, {api_seasons} seasons"
-            )
-            if unresolved_ids:
-                progress.console.print(
-                    f"  [yellow]Name fallback:[/yellow] {len(fallback_results)} episodes "
-                    f"-> {fb_shows} shows, {fb_seasons} seasons"
-                )
-            if fallback_failed:
-                progress.console.print(
-                    f"  [red]Unresolvable:[/red] {fallback_failed} episodes (no usable data)"
-                )
+        cb("Resolving episodes: done", len(ids), len(ids))
 
         return results
 
@@ -307,7 +281,7 @@ class JellyfinClient:
     def get_file_paths(
         self,
         ids: list[str],
-        progress: Progress | None = None,
+        progress_callback: ProgressCallback | None = None,
         desc: str = "Resolving file paths",
     ) -> list[str]:
         """
@@ -316,21 +290,17 @@ class JellyfinClient:
 
         Args:
             ids: Jellyfin item IDs to resolve.
-            progress: Optional Rich Progress instance for tracking.
-            desc: Label shown on the progress bar.
+            progress_callback: Optional (step, current, total) callback.
+            desc: Label shown in the progress step name.
         """
         results: list[str] = []
         chunks = list(range(0, len(ids), self.chunk_length))
+        cb = progress_callback or (lambda *_: None)
 
-        task = None
-        if progress and chunks:
-            task = progress.add_task(desc, total=len(chunks))
-
-        for i in chunks:
+        for idx, i in enumerate(chunks):
             results.extend(
                 self._get_file_paths_for_chunk_length(ids[i:i + self.chunk_length]))
-            if progress and task is not None:
-                progress.advance(task)
+            cb(desc, idx + 1, len(chunks))
 
         return results
 

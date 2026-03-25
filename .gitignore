@@ -1,4 +1,8 @@
 .cortex/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
 cleanup_report.yaml
 
 # secrets

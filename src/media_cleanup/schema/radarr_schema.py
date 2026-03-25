@@ -38,38 +38,38 @@ class QualityModel(_Base):
 
 
 class MediaInfoResource(_Base):
-    id: int
-    audio_bitrate: int
-    audio_channels: float
-    audio_codec: str
-    audio_languages: str
-    audio_stream_count: int
-    video_bit_depth: int
-    video_bitrate: int
-    video_codec: str
-    video_fps: float
-    video_dynamic_range: str
-    video_dynamic_range_type: str
-    resolution: str
-    run_time: str
-    scan_type: str
-    subtitles: str
+    id: int = 0
+    audio_bitrate: int = 0
+    audio_channels: float = 0
+    audio_codec: str = ""
+    audio_languages: str = ""
+    audio_stream_count: int = 0
+    video_bit_depth: int = 0
+    video_bitrate: int = 0
+    video_codec: str = ""
+    video_fps: float = 0
+    video_dynamic_range: str = ""
+    video_dynamic_range_type: str = ""
+    resolution: str = ""
+    run_time: str = ""
+    scan_type: str = ""
+    subtitles: str = ""
 
 
 class MovieFileResource(_Base):
     """Represents a physical movie file on disk as returned by Radarr."""
     id: int
-    movie_id: int
+    movie_id: int = 0
     relative_path: str | None = None
     path: str | None = None
-    size: int
-    date_added: str  # ISO 8601
+    size: int = 0
+    date_added: str = ""
     scene_name: str | None = None
     release_group: str | None = None
-    languages: list[Language]
-    quality: QualityModel
-    media_info: MediaInfoResource
-    quality_cutoff_not_met: bool
+    languages: list[Language] = []
+    quality: QualityModel | None = None
+    media_info: MediaInfoResource | None = None
+    quality_cutoff_not_met: bool = False
     indexer_flags: int | None = None
 
 
@@ -79,9 +79,22 @@ class Image(_Base):
     remote_url: str
 
 
+class RatingEntry(_Base):
+    votes: int = 0
+    value: float = 0.0
+    type: str = ""
+
+
 class Ratings(_Base):
-    votes: int
-    value: float
+    """Radarr v3 ratings — nested per provider (imdb, tmdb, etc.) or flat legacy."""
+    # Modern nested format
+    imdb: RatingEntry | None = None
+    tmdb: RatingEntry | None = None
+    metacritic: RatingEntry | None = None
+    rotten_tomatoes: RatingEntry | None = None
+    # Legacy flat format fallback
+    votes: int = 0
+    value: float = 0.0
 
 
 class MovieStatistics(_Base):
