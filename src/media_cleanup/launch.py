@@ -360,6 +360,8 @@ def run() -> None:
         unmatched_seasons=result.recent_seasons_unmatched + result.old_seasons_unmatched,
         kept_movie_matches=result.kept_movie_matches,
         kept_season_matches=result.kept_season_matches,
+        collision_movie_matches=result.collision_movie_matches,
+        collision_season_matches=result.collision_season_matches,
         month_threshold=month_threshold,
     )
 

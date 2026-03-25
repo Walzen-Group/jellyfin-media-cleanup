@@ -26,9 +26,9 @@ const statusOptions = [
 ]
 
 const statusLabels: Record<MediaStatus, string> = {
-  recent: 'Recent',
+  recent: 'Recently',
   old: 'Not Recent',
-  mixed: 'Mixed',
+  mixed: 'Some',
   kept: 'Kept',
   unmatched: 'Unmatched',
   never: 'Never',
@@ -44,7 +44,7 @@ const statusColors: Record<MediaStatus, string> = {
   unmatched: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
   never: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   never_new: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
-  collision: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300',
+  collision: 'bg-fuchsia-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
 }
 
 const filters = ref<DataTableFilterMeta>({
@@ -104,7 +104,7 @@ const filteredCount = computed(() => {
           >{{ data.title }}</span>
         </template>
       </Column>
-      <Column field="status" header="Status" :showFilterMenu="false" :showClearButton="false" style="width: 180px">
+      <Column field="status" header="Watch Status" :showFilterMenu="false" :showClearButton="false" style="width: 180px">
         <template #body="{ data }">
           <span class="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium" :class="statusColors[data.status as MediaStatus]">
             {{ statusLabels[data.status as MediaStatus] }}

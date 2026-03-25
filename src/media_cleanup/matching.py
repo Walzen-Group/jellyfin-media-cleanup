@@ -279,8 +279,27 @@ def _get_season_size(series: Series, season_number: int) -> int:
     return series.statistics.size_on_disk if season_number == -1 else 0
 
 
+_YEAR_SUFFIX_RE = re.compile(r'\s*\((\d{4})\)\s*$')
+
+
+def _strip_year(title: str) -> str:
+    """Strip a trailing year suffix like '(2024)' from a title."""
+    return _YEAR_SUFFIX_RE.sub('', title)
+
+
+def _extract_year(title: str) -> int | None:
+    """Extract a trailing year like '(2024)' from a title, or None."""
+    m = _YEAR_SUFFIX_RE.search(title)
+    return int(m.group(1)) if m else None
+
+
 def _length_ratio(a: str, b: str) -> float:
-    """Return len(shorter) / len(longer), or 1.0 if both are empty."""
+    """Return len(shorter) / len(longer), or 1.0 if both are empty.
+
+    Strips trailing year suffixes like '(2024)' before comparing so that
+    'Dark Matter' vs 'Dark Matter (2024)' isn't penalized.
+    """
+    a, b = _strip_year(a), _strip_year(b)
     la, lb = len(a), len(b)
     if la == 0 and lb == 0:
         return 1.0
@@ -289,27 +308,71 @@ def _length_ratio(a: str, b: str) -> float:
 
 def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Optional[Series]:
     """
-    Try to match a season's series_name to a Sonarr series by checking
-    if the Sonarr series title matches the Jellyfin series name as whole
-    words (case-insensitive). Uses word boundary regex to avoid substring
-    false positives like "House" matching "Housewives".
+    Try to match a season's series_name to a Sonarr series.
 
-    Word-boundary matches also require a minimum length ratio so that a short
-    title like "House" cannot match inside "House of Guinness".
+    Match priority:
+    1. Exact title match (case-insensitive)
+    2. Exact match after stripping year suffixes (e.g. 'Dark Matter' matches
+       'Dark Matter (2024)').  When multiple series match after stripping,
+       pick the one whose year is closest to (but not after) the watch date.
+    3. Word-boundary substring match, gated by a minimum length ratio to
+       prevent 'House' from matching 'House of Guinness'.
     """
     name_lower = season.series_name.lower()
+    name_stripped = _strip_year(name_lower)
+
+    # Pass 1: exact title match (no year stripping)
+    for series in sonarr_series:
+        if series.title.lower() == name_lower:
+            return series
+
+    # Pass 2: year-stripped exact match -- collect all candidates
+    year_candidates: list[Series] = []
+    for series in sonarr_series:
+        if _strip_year(series.title.lower()) == name_stripped:
+            year_candidates.append(series)
+
+    if len(year_candidates) == 1:
+        return year_candidates[0]
+    if len(year_candidates) > 1:
+        return _pick_by_watch_date(year_candidates, season.last_played)
+
+    # Pass 3: word-boundary match with length guard
     for series in sonarr_series:
         title_lower = series.title.lower()
-        # Exact match — always accept
-        if title_lower == name_lower:
-            return series
-        # Word-boundary match only when the two titles are of comparable length
         if _length_ratio(title_lower, name_lower) >= LENGTH_RATIO_THRESHOLD:
             if re.search(r'\b' + re.escape(title_lower) + r'\b', name_lower):
                 return series
             if re.search(r'\b' + re.escape(name_lower) + r'\b', title_lower):
                 return series
     return None
+
+
+def _pick_by_watch_date(candidates: list[Series], last_played: str) -> Series:
+    """
+    Given multiple Sonarr series with the same base title (e.g. 'Dark Matter
+    (2024)' and 'Dark Matter (2026)'), pick the one whose year best fits
+    the watch date.  Prefer the most recent year that is <= the watch year.
+    Falls back to the earliest year if all are after the watch year.
+    """
+    try:
+        watch_year = int(last_played[:4])
+    except (ValueError, IndexError):
+        return candidates[0]
+
+    best: Series | None = None
+    best_year: int = 0
+    for series in candidates:
+        year = _extract_year(series.title) or 0
+        if year <= watch_year and year > best_year:
+            best = series
+            best_year = year
+
+    if best is not None:
+        return best
+
+    # All candidates are newer than the watch date -- pick the earliest
+    return min(candidates, key=lambda s: _extract_year(s.title) or 9999)
 
 
 # ------------------------------------------------------------------ #

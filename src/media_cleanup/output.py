@@ -27,6 +27,8 @@ def generate_report(
     unmatched_seasons: list[SeasonSummary] | None = None,
     kept_movie_matches: list[MatchResult] | None = None,
     kept_season_matches: list[SeasonSummary] | None = None,
+    collision_movie_matches: list[MatchResult] | None = None,
+    collision_season_matches: list[SeasonSummary] | None = None,
     output_path: str = "cleanup_report.yaml"
 ) -> str:
     """
@@ -47,6 +49,10 @@ def generate_report(
         kept_movie_matches = []
     if kept_season_matches is None:
         kept_season_matches = []
+    if collision_movie_matches is None:
+        collision_movie_matches = []
+    if collision_season_matches is None:
+        collision_season_matches = []
 
     # Unmatched movies are those that went through matching but got no match
     all_movies = recently_watched_movies + not_recently_watched_movies
@@ -71,6 +77,10 @@ def generate_report(
         "keep": {
             "movies": _format_movie_list(kept_movie_matches),
             "series": _format_season_list(kept_season_matches),
+        },
+        "collision": {
+            "movies": _format_movie_list(collision_movie_matches),
+            "series": _format_season_list(collision_season_matches),
         },
         "unmatched": {
             "movies": [{"jellyfin_path": m.jellyfin_path} for m in unmatched_movies],
