@@ -30,6 +30,22 @@ ProgressCallback = Callable[[str, int, int], None]
 
 
 
+_NORMALIZE_RE = re.compile(r'[^a-z0-9 ]+')
+_MULTI_SPACE_RE = re.compile(r' {2,}')
+
+
+def normalize_title(title: str) -> str:
+    """Normalize a media title for comparison/grouping.
+
+    Handles common variants: '&' vs 'and', colons, dashes, punctuation.
+    """
+    t = title.lower()
+    t = t.replace('&', ' and ')
+    t = _NORMALIZE_RE.sub(' ', t)
+    t = _MULTI_SPACE_RE.sub(' ', t)
+    return t.strip()
+
+
 # Minimum similarity score (0–100) for a fuzzy match to be considered valid
 FUZZY_THRESHOLD = 88
 
@@ -154,10 +170,16 @@ def build_season_summaries(
         - recent_seasons: seasons with at least one episode watched within threshold
         - old_seasons: seasons whose most recent episode watch is older than threshold
     """
-    # Group episodes: (series_name, season_number) -> list of EpisodeInfo
+    # Group episodes by normalized name so that variants like
+    # "Fionna & Cake" and "Fionna and Cake" merge into one season.
+    norm_to_display: dict[str, str] = {}
     groups: dict[tuple[str, int], list[EpisodeInfo]] = {}
     for ep in episodes:
-        key = (ep.series_name, ep.season_number)
+        norm = normalize_title(ep.series_name)
+        # Keep the first variant seen as the display name
+        if norm not in norm_to_display:
+            norm_to_display[norm] = ep.series_name
+        key = (norm, ep.season_number)
         groups.setdefault(key, []).append(ep)
 
     cutoff = datetime.now() - timedelta(days=month_threshold * 30)
@@ -165,12 +187,13 @@ def build_season_summaries(
     recent_seasons: list[SeasonSummary] = []
     old_seasons: list[SeasonSummary] = []
 
-    for (series_name, season_number), eps in groups.items():
+    for (norm_name, season_number), eps in groups.items():
         # Most recent play date across all episodes in this season
         last_played = max(ep.last_played for ep in eps)
+        display_name = norm_to_display[norm_name]
 
         summary = SeasonSummary(
-            series_name=series_name,
+            series_name=display_name,
             season_number=season_number,
             last_played=last_played,
             episode_count=len(eps),
@@ -318,18 +341,18 @@ def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Op
     3. Word-boundary substring match, gated by a minimum length ratio to
        prevent 'House' from matching 'House of Guinness'.
     """
-    name_lower = season.series_name.lower()
-    name_stripped = _strip_year(name_lower)
+    name_norm = normalize_title(season.series_name)
+    name_base = normalize_title(_strip_year(season.series_name))
 
-    # Pass 1: exact title match (no year stripping)
+    # Pass 1: exact normalized match (no year stripping)
     for series in sonarr_series:
-        if series.title.lower() == name_lower:
+        if normalize_title(series.title) == name_norm:
             return series
 
-    # Pass 2: year-stripped exact match -- collect all candidates
+    # Pass 2: year-stripped normalized match -- collect all candidates
     year_candidates: list[Series] = []
     for series in sonarr_series:
-        if _strip_year(series.title.lower()) == name_stripped:
+        if normalize_title(_strip_year(series.title)) == name_base:
             year_candidates.append(series)
 
     if len(year_candidates) == 1:
@@ -337,13 +360,13 @@ def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Op
     if len(year_candidates) > 1:
         return _pick_by_watch_date(year_candidates, season.last_played)
 
-    # Pass 3: word-boundary match with length guard
+    # Pass 3: word-boundary match with length guard (on normalized titles)
     for series in sonarr_series:
-        title_lower = series.title.lower()
-        if _length_ratio(title_lower, name_lower) >= LENGTH_RATIO_THRESHOLD:
-            if re.search(r'\b' + re.escape(title_lower) + r'\b', name_lower):
+        title_norm = normalize_title(series.title)
+        if _length_ratio(title_norm, name_norm) >= LENGTH_RATIO_THRESHOLD:
+            if re.search(r'\b' + re.escape(title_norm) + r'\b', name_norm):
                 return series
-            if re.search(r'\b' + re.escape(name_lower) + r'\b', title_lower):
+            if re.search(r'\b' + re.escape(name_norm) + r'\b', title_norm):
                 return series
     return None
 

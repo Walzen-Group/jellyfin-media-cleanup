@@ -129,9 +129,10 @@ class SeriesGroup(_Base):
     match_method: str | None = None
     fuzzy_score: float | None = None
     size_bytes: int = 0
-    status: str = ""  # "recent", "old", "mixed", "kept", "unmatched", "never", "never_new"
+    status: str = ""  # "recent", "old", "mixed", "kept", "unmatched", "never", "never_new", "collision"
     added: str = ""  # ISO 8601 from Sonarr
     seasons: list[SeasonInfo] = []
+    colliding_names: list[str] = []  # populated for collision entries
 
 
 class MediaSection(_Base):
@@ -434,12 +435,14 @@ def _build_all_series_groups(
         season_statuses = {status for _, status in sorted_seasons}
         sonarr_seasons = sonarr_lookup.get(key, {})
 
+        distinct_names = sorted({s.series_name for s, _ in sorted_seasons})
         groups.append(SeriesGroup(
             title=first_season.series_name,
             library_path=first_season.matched_sonarr_path,
             match_method=first_season.match_method,
             fuzzy_score=first_season.fuzzy_score,
             status=_derive_show_status(season_statuses),
+            colliding_names=distinct_names if len(distinct_names) > 1 else [],
             size_bytes=sum(s.size_on_disk for s, _ in sorted_seasons),
             seasons=[
                 SeasonInfo(

@@ -7,10 +7,12 @@ from media_cleanup.matching import (
     _pick_by_watch_date,
     _length_ratio,
     _strip_year,
+    normalize_title,
     match_seasons_to_sonarr,
+    build_season_summaries,
 )
 from media_cleanup.schema.sonarr_schema import Series
-from media_cleanup.types import SeasonSummary
+from media_cleanup.types import EpisodeInfo, SeasonSummary
 
 
 def _series(title: str, path: str | None = None) -> Series:
@@ -155,3 +157,36 @@ def test_match_seasons_end_to_end():
     dm = next(s for s in matched if s.series_name == "Dark Matter")
     assert dm.matched_sonarr_path == "/tv/Dark Matter (2024)"
     assert dm.match_method == "path"
+
+
+# ------------------------------------------------------------------ #
+#  Title normalization
+# ------------------------------------------------------------------ #
+
+def test_normalize_title():
+    assert normalize_title("Adventure Time: Fionna & Cake") == "adventure time fionna and cake"
+    assert normalize_title("Adventure Time: Fionna and Cake") == "adventure time fionna and cake"
+    assert normalize_title("Dark Matter (2024)") == "dark matter 2024"
+    assert normalize_title("Mr. Robot") == "mr robot"
+
+
+def test_ampersand_vs_and_matches():
+    """'Fionna & Cake' matches 'Fionna and Cake' in Sonarr via normalization."""
+    sonarr = [_series("Adventure Time: Fionna and Cake")]
+    result = _path_match_season(_season("Adventure Time: Fionna & Cake"), sonarr)
+    assert result is not None
+
+
+def test_ampersand_vs_and_groups_episodes():
+    """Episodes with '&' and 'and' variants merge into one season."""
+    episodes = [
+        EpisodeInfo(item_id="1", series_name="Fionna & Cake", season_number=1,
+                    file_path="", last_played="2025-01-01 12:00:00"),
+        EpisodeInfo(item_id="2", series_name="Fionna and Cake", season_number=1,
+                    file_path="", last_played="2025-06-01 12:00:00"),
+    ]
+    recent, old = build_season_summaries(episodes, month_threshold=12)
+    all_seasons = recent + old
+    # Should produce ONE season, not two
+    assert len(all_seasons) == 1
+    assert all_seasons[0].episode_count == 2

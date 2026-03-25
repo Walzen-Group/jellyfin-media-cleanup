@@ -46,6 +46,7 @@ export interface SeriesGroup {
   sizeBytes: number
   status: MediaStatus
   seasons: SeasonInfo[]
+  collidingNames: string[]
 }
 
 export interface MediaSection {

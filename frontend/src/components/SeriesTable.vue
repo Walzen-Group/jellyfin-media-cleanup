@@ -17,7 +17,7 @@ const expandedRows = ref<Record<string, boolean>>({})
 const statusOptions = [
   { label: 'Recently Watched', value: 'recent' },
   { label: 'Not Recently Watched', value: 'old' },
-  { label: 'Mixed', value: 'mixed' },
+  { label: 'Some Recently Watched', value: 'mixed' },
   { label: 'Kept', value: 'kept' },
   { label: 'Unmatched', value: 'unmatched' },
   { label: 'Never Watched', value: 'never' },
@@ -192,6 +192,15 @@ const filteredCount = computed(() => {
               </template>
             </Column>
           </DataTable>
+          <div v-if="data.collidingNames?.length" class="mt-2 px-3 py-2 rounded bg-fuchsia-50 dark:bg-fuchsia-950/30 border border-fuchsia-200 dark:border-fuchsia-800">
+            <span class="text-xs font-medium text-fuchsia-700 dark:text-fuchsia-300">Collision: </span>
+            <span class="text-xs text-fuchsia-600 dark:text-fuchsia-400">
+              Multiple Jellyfin names matched this library entry:
+            </span>
+            <ul class="mt-1 list-disc list-inside text-xs text-fuchsia-600 dark:text-fuchsia-400 font-mono">
+              <li v-for="name in data.collidingNames" :key="name">{{ name }}</li>
+            </ul>
+          </div>
           <div v-if="data.libraryPath" class="mt-2 text-xs text-surface-500 font-mono">
             {{ data.libraryPath }}
           </div>

@@ -83,7 +83,7 @@ const rows: Row[] = [
         <template v-for="(row, i) in rows" :key="i">
           <tr v-if="row.sep" class="h-px">
             <td colspan="6" class="p-0">
-              <div class="border-t border-surface-100 dark:border-surface-800"></div>
+              <div class="border-t border-gray-700 dark:border-gray-600"></div>
             </td>
           </tr>
           <tr v-else>

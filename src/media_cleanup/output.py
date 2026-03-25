@@ -137,9 +137,12 @@ def _format_season_list(seasons: list[SeasonSummary]) -> list[dict[str, Any]]:
         season_list.sort(key=lambda s: s.season_number)
         first = season_list[0]
 
+        distinct_names = sorted({s.series_name for s in season_list})
         entry: dict[str, Any] = {
             "title": first.series_name,
         }
+        if len(distinct_names) > 1:
+            entry["colliding_names"] = distinct_names
         if first.matched_sonarr_path:
             entry["library_path"] = first.matched_sonarr_path
         if first.match_method:
