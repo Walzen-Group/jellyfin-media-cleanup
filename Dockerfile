@@ -1,18 +1,25 @@
 # ---- Stage 1: Build frontend ----
 FROM node:22-alpine AS frontend-build
 
-# Git hash passed from docker compose build for version display in the UI
-ARG GIT_HASH=unknown
-ENV VITE_GIT_HASH=$GIT_HASH
+RUN apk add --no-cache git && \
+    corepack enable && corepack prepare pnpm@10.33.0 --activate
 
-RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+WORKDIR /app
+
+# Copy minimal .git metadata so we can read the commit hash
+COPY .git/HEAD .git/HEAD
+COPY .git/refs .git/refs
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY frontend/ ./
-RUN pnpm run build
+
+# Bake git hash into the frontend build; falls back to 'unknown' if .git is incomplete
+ENV VITE_GIT_HASH=""
+RUN VITE_GIT_HASH=$(cd /app && git rev-parse --short HEAD 2>/dev/null || echo "unknown") \
+    pnpm run build
 
 
 # ---- Stage 2: Python runtime ----

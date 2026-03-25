@@ -1,4 +1,7 @@
-.git
+.git/objects
+.git/hooks
+.git/logs
+.git/info
 .vscode
 .venv
 __pycache__
