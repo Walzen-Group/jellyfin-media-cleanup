@@ -26,7 +26,7 @@ function fmt(val: string): string {
 type Row = {
   label: string
   movies?: string; shows?: string; seasons?: string
-  movieSize?: string; seriesSize?: string
+  movieSize?: string; seriesSize?: string; seriesSizeGreedy?: string
   cls: string;         // Tailwind color class for the row
   sep?: boolean        // If true, render as separator line instead of data row
 }
@@ -43,6 +43,7 @@ function catRow(label: string, cat: CategoryStats, cls: string, showSeasons = tr
     seasons: showSeasons ? n(cat.seasonsCount) : '',
     movieSize: fmt(cat.movieSizeFmt),
     seriesSize: fmt(cat.seriesSizeFmt),
+    seriesSizeGreedy: fmt(cat.seriesSizeGreedyFmt),
     cls,
   }
 }
@@ -104,12 +105,13 @@ const rows: Row[] = [
           <th class="px-4 py-2 text-right">Seasons</th>
           <th class="px-4 py-2 text-right">Movie Size</th>
           <th class="px-4 py-2 text-right">Series Size</th>
+          <th class="px-4 py-2 text-right">Series Size (Greedy)</th>
         </tr>
       </thead>
       <tbody>
         <template v-for="(row, i) in rows" :key="i">
           <tr v-if="row.sep" class="h-px">
-            <td colspan="6" class="p-0">
+            <td colspan="7" class="p-0">
               <div class="border-t border-gray-700 dark:border-gray-600"></div>
             </td>
           </tr>
@@ -120,6 +122,7 @@ const rows: Row[] = [
             <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seasons ?? '' }}</td>
             <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.movieSize ?? '' }}</td>
             <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seriesSize ?? '' }}</td>
+            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seriesSizeGreedy ?? '' }}</td>
           </tr>
         </template>
       </tbody>

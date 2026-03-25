@@ -194,6 +194,7 @@ def run() -> None:
         summary.add_column("Movie Size", justify="right")
     if mode in ("all", "series"):
         summary.add_column("Series Size", justify="right")
+        summary.add_column("Series Size (Greedy)", justify="right")
 
     # Recently watched
     row: list[str] = ["[bold]Recently watched[/bold]"]
@@ -206,6 +207,7 @@ def run() -> None:
         row.append(f"[green]{s.recent.movie_size_fmt}[/green]")
     if mode in ("all", "series"):
         row.append(f"[green]{s.recent.series_size_fmt}[/green]")
+        row.append(f"[green]{s.recent.series_size_greedy_fmt}[/green]")
     summary.add_row(*row)
 
     # Not recently watched
@@ -219,6 +221,7 @@ def run() -> None:
         row.append(f"[red]{s.old.movie_size_fmt}[/red]")
     if mode in ("all", "series"):
         row.append(f"[red]{s.old.series_size_fmt}[/red]")
+        row.append(f"[red]{s.old.series_size_greedy_fmt}[/red]")
     summary.add_row(*row)
 
     # Never watched
@@ -232,6 +235,7 @@ def run() -> None:
         row.append(f"[purple]{s.never_watched.movie_size_fmt}[/purple]")
     if mode in ("all", "series"):
         row.append(f"[purple]{s.never_watched.series_size_fmt}[/purple]")
+        row.append(f"[purple]{s.never_watched.series_size_greedy_fmt}[/purple]")
     summary.add_row(*row)
 
     # New (unwatched)
@@ -245,6 +249,7 @@ def run() -> None:
         row.append(f"[cyan]{s.never_new.movie_size_fmt}[/cyan]")
     if mode in ("all", "series"):
         row.append(f"[cyan]{s.never_new.series_size_fmt}[/cyan]")
+        row.append(f"[cyan]{s.never_new.series_size_greedy_fmt}[/cyan]")
     summary.add_row(*row)
 
     # Library
@@ -259,6 +264,7 @@ def run() -> None:
         row.append(f"[dim]{s.library.movie_size_fmt}[/dim]")
     if mode in ("all", "series"):
         row.append(f"[dim]{s.library.series_size_fmt}[/dim]")
+        row.append(f"[dim]{s.library.series_size_greedy_fmt}[/dim]")
     summary.add_row(*row)
 
     row = ["Kept"]
@@ -271,6 +277,7 @@ def run() -> None:
         row.append(f"[yellow]{s.kept.movie_size_fmt}[/yellow]")
     if mode in ("all", "series"):
         row.append(f"[yellow]{s.kept.series_size_fmt}[/yellow]")
+        row.append(f"[yellow]{s.kept.series_size_greedy_fmt}[/yellow]")
     summary.add_row(*row)
 
     # Matching
@@ -285,6 +292,7 @@ def run() -> None:
         row.append("")
     if mode in ("all", "series"):
         row.append("")
+        row.append("")
     summary.add_row(*row)
 
     row = ["Ambiguous"]
@@ -296,6 +304,7 @@ def run() -> None:
     if mode in ("all", "movies"):
         row.append("")
     if mode in ("all", "series"):
+        row.append("")
         row.append("")
     summary.add_row(*row)
 
@@ -309,6 +318,7 @@ def run() -> None:
         row.append("")
     if mode in ("all", "series"):
         row.append("")
+        row.append("")
     summary.add_row(*row)
 
     row = ["Unmatched"]
@@ -320,6 +330,7 @@ def run() -> None:
     if mode in ("all", "movies"):
         row.append("")
     if mode in ("all", "series"):
+        row.append("")
         row.append("")
     summary.add_row(*row)
 
@@ -336,6 +347,7 @@ def run() -> None:
                 row.append("")
             if mode in ("all", "series"):
                 row.append("")
+                row.append("")
             summary.add_row(*row)
         if s.episodes.skipped:
             row = ["Episodes skipped (no data)"]
@@ -345,6 +357,7 @@ def run() -> None:
             if mode in ("all", "movies"):
                 row.append("")
             if mode in ("all", "series"):
+                row.append("")
                 row.append("")
             summary.add_row(*row)
 

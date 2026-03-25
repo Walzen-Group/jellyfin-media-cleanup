@@ -57,20 +57,21 @@ const store = useJobStore()
       </Tabs>
     </template>
 
-    <!-- Show loading spinner while restoring initial job, or empty state if no result -->
+    <!-- Spinner shown while fetching initial job from API -->
+    <div
+      v-else-if="store.loading"
+      class="py-16 flex items-center justify-center"
+    >
+      <ProgressSpinner style="width: 96px; height: 96px" strokeWidth="6" />
+    </div>
+
+    <!-- Empty state: no job result yet; prompt user to run analysis -->
     <div
       v-else-if="!store.isAnalyzing"
       class="card p-12 flex flex-col items-center justify-center text-center text-surface-500"
     >
-      <template v-if="store.loading">
-        <!-- Spinner shown while fetching initial job from API -->
-        <ProgressSpinner style="width: 36px; height: 36px" strokeWidth="4" />
-      </template>
-      <template v-else>
-        <!-- Empty state: no job result yet; prompt user to run analysis -->
-        <p class="text-xl mb-2">No analysis results yet</p>
-        <p class="text-sm">Configure options above and click "Run Analysis" to start.</p>
-      </template>
+      <p class="text-xl mb-2">No analysis results yet</p>
+      <p class="text-sm">Configure options above and click "Run Analysis" to start.</p>
     </div>
   </div>
 </template>

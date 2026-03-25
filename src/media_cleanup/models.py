@@ -152,9 +152,11 @@ class CategoryStats(_Base):
     total_size: int = 0
     movie_size: int = 0
     series_size: int = 0
+    series_size_greedy: int = 0
     total_size_fmt: str = ""
     movie_size_fmt: str = ""
     series_size_fmt: str = ""
+    series_size_greedy_fmt: str = ""
 
 
 class MatchingStats(_Base):
@@ -229,6 +231,7 @@ def _make_category(
     seasons_count: int = 0,
     movie_size: int = 0,
     series_size: int = 0,
+    series_size_greedy: int = 0,
 ) -> CategoryStats:
     total = movie_size + series_size
     return CategoryStats(
@@ -238,9 +241,11 @@ def _make_category(
         total_size=total,
         movie_size=movie_size,
         series_size=series_size,
+        series_size_greedy=series_size_greedy,
         total_size_fmt=_format_size(total),
         movie_size_fmt=_format_size(movie_size),
         series_size_fmt=_format_size(series_size),
+        series_size_greedy_fmt=_format_size(series_size_greedy),
     )
 
 
@@ -278,11 +283,40 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
     )
     unmatched_seasons = result.recent_seasons_unmatched + result.old_seasons_unmatched
 
+    # Build per-category path sets to determine which series are "fully" in one category.
+    # A series counts toward the conservative series_size only if ALL its watched seasons
+    # fall in that same category (e.g., all old, none recent).
+    recent_paths: dict[str, int] = {}
+    old_paths: dict[str, int] = {}
+    kept_paths: dict[str, int] = {}
+    for s in result.recent_seasons_matched:
+        if s.matched_sonarr_path:
+            recent_paths[s.matched_sonarr_path] = recent_paths.get(s.matched_sonarr_path, 0) + 1
+    for s in result.old_seasons_matched:
+        if s.matched_sonarr_path:
+            old_paths[s.matched_sonarr_path] = old_paths.get(s.matched_sonarr_path, 0) + 1
+    for s in result.kept_season_matches:
+        if s.matched_sonarr_path:
+            kept_paths[s.matched_sonarr_path] = kept_paths.get(s.matched_sonarr_path, 0) + 1
+
+    # "Fully X" means the series path appears ONLY in that category's set
+    all_watched_paths = set(recent_paths) | set(old_paths) | set(kept_paths)
+    fully_recent_paths = set(recent_paths) - set(old_paths) - set(kept_paths)
+    fully_old_paths = set(old_paths) - set(recent_paths) - set(kept_paths)
+    fully_kept_paths = set(kept_paths) - set(recent_paths) - set(old_paths)
+
+    series_by_path = {s.path: s for s in result.all_series}
+
+    def _full_series_size(paths: set[str]) -> int:
+        return sum(
+            series_by_path[p].statistics.size_on_disk
+            for p in paths if p in series_by_path
+        )
+
     # Space savings
     seasons_only = _movie_size(result.old_movie_matches) + _season_size(result.old_seasons_matched)
     entire_shows = _movie_size(result.old_movie_matches)
     if mode in ("all", "series") and result.old_seasons_matched:
-        series_by_path = {s.path: s for s in result.all_series}
         old_series_paths = {
             s.matched_sonarr_path for s in result.old_seasons_matched if s.matched_sonarr_path
         }
@@ -297,39 +331,45 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
             shows_count=_unique_shows(result.recent_seasons_matched),
             seasons_count=len(result.recent_seasons_matched),
             movie_size=_movie_size(result.recent_movie_matches),
-            series_size=_season_size(result.recent_seasons_matched),
+            series_size=_full_series_size(fully_recent_paths),
+            series_size_greedy=_season_size(result.recent_seasons_matched),
         ),
         old=_make_category(
             movie_count=len(result.old_movie_matches),
             shows_count=_unique_shows(result.old_seasons_matched),
             seasons_count=len(result.old_seasons_matched),
             movie_size=_movie_size(result.old_movie_matches),
-            series_size=_season_size(result.old_seasons_matched),
+            series_size=_full_series_size(fully_old_paths),
+            series_size_greedy=_season_size(result.old_seasons_matched),
         ),
         never_watched=_make_category(
             movie_count=len(never_movies),
             shows_count=len(never_series),
             movie_size=sum(m.size_on_disk for m in never_movies),
             series_size=sum(s.statistics.size_on_disk for s in never_series),
+            series_size_greedy=sum(s.statistics.size_on_disk for s in never_series),
         ),
         never_new=_make_category(
             movie_count=len(never_new_movies),
             shows_count=len(never_new_series),
             movie_size=sum(m.size_on_disk for m in never_new_movies),
             series_size=sum(s.statistics.size_on_disk for s in never_new_series),
+            series_size_greedy=sum(s.statistics.size_on_disk for s in never_new_series),
         ),
         library=_make_category(
             movie_count=len(result.all_movies),
             shows_count=len(result.all_series),
             movie_size=sum(m.size_on_disk for m in result.all_movies),
             series_size=sum(s.statistics.size_on_disk for s in result.all_series),
+            series_size_greedy=sum(s.statistics.size_on_disk for s in result.all_series),
         ),
         kept=_make_category(
             movie_count=len(result.kept_movie_matches),
             shows_count=_unique_shows(result.kept_season_matches),
             seasons_count=len(result.kept_season_matches),
             movie_size=_movie_size(result.kept_movie_matches),
-            series_size=_season_size(result.kept_season_matches),
+            series_size=_full_series_size(fully_kept_paths),
+            series_size_greedy=_season_size(result.kept_season_matches),
         ),
         matching=MatchingStats(
             matched_movie_count=sum(1 for m in all_movie_matches if m.is_matched),

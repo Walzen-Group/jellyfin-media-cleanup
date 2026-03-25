@@ -78,10 +78,12 @@ export interface CategoryStats {
   seasonsCount: number
   totalSize: number            // bytes
   movieSize: number            // bytes
-  seriesSize: number           // bytes
+  seriesSize: number           // bytes: full series where ALL seasons are in this category
+  seriesSizeGreedy: number     // bytes: sum of individual season sizes in this category
   totalSizeFmt: string         // formatted e.g. "1.2 TB"
   movieSizeFmt: string
   seriesSizeFmt: string
+  seriesSizeGreedyFmt: string
 }
 
 /**
