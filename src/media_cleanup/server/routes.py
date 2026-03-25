@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from media_cleanup.server.models import (
+from media_cleanup.models import (
     AnalysisRequest,
     JobResponse,
     JobStatus,

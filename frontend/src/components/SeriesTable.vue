@@ -10,7 +10,6 @@ import { formatSize, formatDate } from '../utils/format'
 
 const props = defineProps<{
   series: SeriesRow[]
-  monthThreshold: number
 }>()
 
 const expandedRows = ref<Record<string, boolean>>({})
@@ -22,6 +21,8 @@ const statusOptions = [
   { label: 'Kept', value: 'kept' },
   { label: 'Unmatched', value: 'unmatched' },
   { label: 'Never Watched', value: 'never' },
+  { label: 'New (unwatched)', value: 'never_new' },
+  { label: 'Collision', value: 'collision' },
 ]
 
 const statusLabels: Record<MediaStatus, string> = {
@@ -31,6 +32,8 @@ const statusLabels: Record<MediaStatus, string> = {
   kept: 'Kept',
   unmatched: 'Unmatched',
   never: 'Never',
+  never_new: 'New',
+  collision: 'Collision',
 }
 
 const statusColors: Record<MediaStatus, string> = {
@@ -40,6 +43,8 @@ const statusColors: Record<MediaStatus, string> = {
   kept: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
   unmatched: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
   never: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  never_new: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
+  collision: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300',
 }
 
 const filters = ref<DataTableFilterMeta>({
@@ -126,20 +131,15 @@ const filteredCount = computed(() => {
       </Column>
       <Column header="Seasons" style="width: 140px">
         <template #body="{ data }">
-          <div class="flex gap-px items-center" style="width: 150px">
+          <div class="flex gap-px items-center" style="width: 170px">
             <SeasonDot
               v-for="s in data.seasons"
               :key="s.seasonNumber"
               :season-number="s.seasonNumber"
               :last-played="s.lastPlayed || null"
-              :month-threshold="monthThreshold"
+              :status="s.status"
             />
           </div>
-        </template>
-      </Column>
-      <Column field="totalEpisodes" header="Episodes" sortable style="width: 90px">
-        <template #body="{ data }">
-          <span class="tabular-nums">{{ data.totalEpisodes }}</span>
         </template>
       </Column>
       <Column field="matchMethod" header="Match" sortable style="width: 110px">
@@ -154,32 +154,44 @@ const filteredCount = computed(() => {
       </Column>
 
       <template #expansion="{ data }">
-        <div class="px-6 py-3 ml-10">
-          <table class="text-xs text-surface-400">
-            <thead>
-              <tr>
-                <th class="pb-1.5 pr-8 text-left font-medium">Season</th>
-                <th class="pb-1.5 pr-4 text-center font-medium">Watched</th>
-                <th class="pb-1.5 pr-8 text-left font-medium">Last Played</th>
-                <th class="pb-1.5 pr-8 text-right font-medium">Episodes</th>
-                <th class="pb-1.5 text-right font-medium">Size</th>
-              </tr>
-            </thead>
-            <tbody class="text-surface-500 dark:text-surface-400">
-              <tr v-for="s in data.seasons" :key="s.seasonNumber">
-                <td class="py-1 pr-8">S{{ String(s.seasonNumber).padStart(2, '0') }}</td>
-                <td class="py-1 pr-4 text-center">
-                  <span
-                    class="inline-block w-2.5 h-2.5 rounded-full"
-                    :class="s.lastPlayed && new Date(s.lastPlayed) >= new Date(Date.now() - monthThreshold * 30 * 24 * 60 * 60 * 1000) ? 'bg-emerald-400/70 dark:bg-emerald-400/60' : s.lastPlayed ? 'bg-rose-400/70 dark:bg-rose-400/60' : 'bg-surface-300 dark:bg-surface-600'"
-                  />
-                </td>
-                <td class="py-1 pr-8">{{ formatDate(s.lastPlayed) }}</td>
-                <td class="py-1 pr-8 text-right tabular-nums">{{ s.episodeCount }}</td>
-                <td class="py-1 text-right tabular-nums">{{ formatSize(s.sizeBytes) }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="pl-10 pr-4 py-2">
+          <DataTable :value="data.seasons" size="small" tableClass="text-xs" tableStyle="table-layout: fixed">
+            <Column field="seasonNumber" header="Season" sortable>
+              <template #body="{ data: s }">
+                S{{ String(s.seasonNumber).padStart(2, '0') }}
+              </template>
+            </Column>
+            <Column header="Recent">
+              <template #body="{ data: s }">
+                <span
+                  class="inline-block w-2.5 h-2.5 rounded-full"
+                  :class="s.status === 'recent' ? 'bg-emerald-400/70 dark:bg-emerald-400/60' : s.status === 'old' ? 'bg-rose-400/70 dark:bg-rose-400/60' : s.status === 'kept' ? 'bg-amber-400/70 dark:bg-amber-400/60' : s.status === 'collision' ? 'bg-fuchsia-400/70 dark:bg-fuchsia-400/60' : 'bg-surface-300 dark:bg-surface-600'"
+                />
+              </template>
+            </Column>
+            <Column header="Available">
+              <template #body="{ data: s }">
+                <span class="text-xs" :class="s.sizeBytes > 0 ? 'text-emerald-500' : 'text-surface-400'">
+                  {{ s.sizeBytes > 0 ? 'Yes' : 'No' }}
+                </span>
+              </template>
+            </Column>
+            <Column field="lastPlayed" :header="data.status === 'never' || data.status === 'never_new' ? 'Added' : 'Last Played'" sortable>
+              <template #body="{ data: s }">
+                {{ s.lastPlayed ? formatDate(s.lastPlayed) : (data.added ? formatDate(data.added) : '–') }}
+              </template>
+            </Column>
+            <Column header="Episodes" sortable>
+              <template #body="{ data: s }">
+                <span class="tabular-nums">{{ s.totalEpisodes || '–' }}</span>
+              </template>
+            </Column>
+            <Column field="sizeBytes" header="Size" sortable>
+              <template #body="{ data: s }">
+                <span class="tabular-nums">{{ formatSize(s.sizeBytes) }}</span>
+              </template>
+            </Column>
+          </DataTable>
           <div v-if="data.libraryPath" class="mt-2 text-xs text-surface-500 font-mono">
             {{ data.libraryPath }}
           </div>

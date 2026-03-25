@@ -16,7 +16,8 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
 from media_cleanup.config import load_config, DEFAULT_MONTH_THRESHOLD
-from media_cleanup.service import CleanupService, build_summary
+from media_cleanup.models import build_summary
+from media_cleanup.service import CleanupService, get_pipeline_steps, MOVIE_STEPS, SERIES_STEPS
 from media_cleanup.output import generate_report
 
 
@@ -33,7 +34,7 @@ console = Console(force_terminal=True)
 
 
 def _make_progress() -> Progress:
-    """Create a Rich progress bar with spinner, description, bar, elapsed time, and ETA."""
+    """Create a Rich progress bar with spinner, description, bar, elapsed time, ETA, and trailing subtitle."""
     return Progress(
         SpinnerColumn(),
         TextColumn("{task.description}"),
@@ -42,6 +43,7 @@ def _make_progress() -> Progress:
         TimeElapsedColumn(),
         TextColumn("[dim]eta[/dim]"),
         TimeRemainingColumn(),
+        TextColumn("{task.fields[subtitle]}"),
         console=console,
     )
 
@@ -63,6 +65,12 @@ def run() -> None:
         type=int,
         default=None,
         help=f"Months threshold — media not watched in this many months is flagged (default: {DEFAULT_MONTH_THRESHOLD}, overrides secrets.yaml)",
+    )
+    parser.add_argument(
+        "--added-threshold",
+        type=int,
+        default=12,
+        help="Never-watched items added within this many months are shown as 'New (unwatched)' rather than cleanup candidates (default: 12)",
     )
     args = parser.parse_args()
     mode = args.mode
@@ -93,47 +101,86 @@ def run() -> None:
     console.print(f"  Mode:      [yellow]{mode_label}[/yellow]\n")
 
     # ----- Run the pipeline with Rich progress -----
-    _active_progress: dict = {}
+    step_offsets, _total_weight = get_pipeline_steps(mode)
 
-    def _step_base(step: str) -> str:
-        """Extract base step name, e.g. 'Resolving episodes: Billions' -> 'Resolving episodes'."""
-        return step.split(":")[0].rstrip()
+    # Map each step name to its group ("movies" or "series")
+    _movie_names = [name for name, _ in MOVIE_STEPS]
+    _series_names = [name for name, _ in SERIES_STEPS]
+    def _group_of(base: str) -> str:
+        if base in _movie_names:
+            return "movies"
+        if base in _series_names:
+            return "series"
+        return base  # unknown — treat as its own group
 
-    def rich_progress_callback(step: str, current: int, total: int) -> None:
-        """Translate service progress events into Rich progress bar updates."""
-        p = _active_progress.get("progress")
-        if p is None:
-            return
-        task_id = _active_progress.get("task")
-        prev_base = _active_progress.get("base")
-        cur_base = _step_base(step)
+    _state: dict = {}  # keys: group, p, task_ids {step_name: task_id}, current_base
 
-        if task_id is None or prev_base != cur_base:
-            # New base step — finish previous task, create new one
-            if task_id is not None:
-                p.update(task_id, completed=p.tasks[task_id].total)
-            task_id = p.add_task(step, total=max(total, 1))
-            _active_progress["task"] = task_id
-            _active_progress["base"] = cur_base
-        # Update description (shows current show name) and progress
-        p.update(task_id, description=step, completed=current, total=max(total, 1))
+    _GROUP_LABELS = {"movies": "Movies", "series": "TV Shows"}
+
+    def rich_progress_callback(step: str, global_current: int, _global_total: int) -> None:
+        """One Progress per group (movies / series); tasks are pre-added hidden
+        and revealed one-by-one as they arrive.  The description column is
+        always the fixed step label, so bar widths never shift.  The show name
+        trails after the ETA.
+        """
+        base = step.split(":")[0].rstrip()
+        step_offset, step_weight = step_offsets.get(base, (0, max(_global_total, 1)))
+        group = _group_of(base)
+
+        # Group transition: stop old Progress, print header, start new one with all tasks hidden
+        if _state.get("group") != group:
+            prev_p = _state.get("p")
+            if prev_p is not None:
+                for sname, tid in _state["task_ids"].items():
+                    _, sw = step_offsets.get(sname, (0, 1))
+                    prev_p.update(tid, completed=sw, visible=True)
+                prev_p.stop()
+            label = _GROUP_LABELS.get(group, group)
+            console.print(f"\n[bold]{label}[/bold]")
+            group_steps = _movie_names if group == "movies" else _series_names
+            p = _make_progress()
+            p.start()
+            task_ids = {
+                sname: p.add_task(sname, total=step_offsets.get(sname, (0, 1))[1], subtitle="", completed=0, visible=False)
+                for sname in group_steps
+            }
+            _state.update({"group": group, "p": p, "task_ids": task_ids, "current_base": None})
+
+        # Step transition within the same group: mark old task complete, reveal new one
+        if _state.get("current_base") != base:
+            old_base = _state.get("current_base")
+            if old_base and old_base in _state["task_ids"]:
+                _, old_weight = step_offsets.get(old_base, (0, 1))
+                _state["p"].update(_state["task_ids"][old_base], completed=old_weight, visible=True)
+            _state["current_base"] = base
+            _state["p"].update(_state["task_ids"][base], visible=True)
+
+        p = _state["p"]
+        task_id = _state["task_ids"][base]
+        local_current = max(0, global_current - step_offset)
+
+        # Show name trails after the ETA; only update when the step carries one
+        kwargs: dict = {"completed": local_current}
+        if ":" in step:
+            kwargs["subtitle"] = step.split(":", 1)[1].strip()
+        p.update(task_id, **kwargs)
 
     service = CleanupService(config)
-
-    with _make_progress() as progress:
-        _active_progress["progress"] = progress
-        result = service.run_analysis(
-            mode=mode,
-            month_threshold=month_threshold,
-            progress_callback=rich_progress_callback,
-        )
-        # Ensure last task shows complete
-        task_id = _active_progress.get("task")
-        if task_id is not None:
-            progress.update(task_id, completed=progress.tasks[task_id].total)
+    result = service.run_analysis(
+        mode=mode,
+        month_threshold=month_threshold,
+        progress_callback=rich_progress_callback,
+    )
+    # Finalise the last group's Progress
+    if _state.get("p") is not None:
+        for sname, tid in _state["task_ids"].items():
+            _, sw = step_offsets.get(sname, (0, 1))
+            _state["p"].update(tid, completed=sw, visible=True)
+        _state["p"].stop()
 
     # ----- Summary -----
-    s = build_summary(result, mode)
+    added_threshold: int = args.added_threshold
+    s = build_summary(result, mode, added_threshold)
 
     console.print()
     summary = Table(title="Summary", show_header=True, header_style="bold magenta")
@@ -143,105 +190,162 @@ def run() -> None:
     if mode in ("all", "series"):
         summary.add_column("Shows", justify="right")
         summary.add_column("Seasons", justify="right")
-    summary.add_column("Size", justify="right")
+    if mode in ("all", "movies"):
+        summary.add_column("Movie Size", justify="right")
+    if mode in ("all", "series"):
+        summary.add_column("Series Size", justify="right")
 
     # Recently watched
     row: list[str] = ["[bold]Recently watched[/bold]"]
     if mode in ("all", "movies"):
-        row.append(f"[green]{s['recent_movie_count']}[/green]")
+        row.append(f"[green]{s.recent.movie_count}[/green]")
     if mode in ("all", "series"):
-        row.append(f"[green]{s['recent_shows_count']}[/green]")
-        row.append(f"[green]{s['recent_seasons_count']}[/green]")
-    row.append(f"[green]{s['recent_size_fmt']}[/green]")
+        row.append(f"[green]{s.recent.shows_count}[/green]")
+        row.append(f"[green]{s.recent.seasons_count}[/green]")
+    if mode in ("all", "movies"):
+        row.append(f"[green]{s.recent.movie_size_fmt}[/green]")
+    if mode in ("all", "series"):
+        row.append(f"[green]{s.recent.series_size_fmt}[/green]")
     summary.add_row(*row)
 
     # Not recently watched
     row = ["[bold]Not recently watched[/bold]"]
     if mode in ("all", "movies"):
-        row.append(f"[red]{s['old_movie_count']}[/red]")
+        row.append(f"[red]{s.old.movie_count}[/red]")
     if mode in ("all", "series"):
-        row.append(f"[red]{s['old_shows_count']}[/red]")
-        row.append(f"[red]{s['old_seasons_count']}[/red]")
-    size_label = f"[red]{s['old_size_fmt']}[/red]"
-    if s['entire_shows_size'] > s['old_size']:
-        size_label += f"\n[dim]{s['entire_shows_size_fmt']} total[/dim]"
-    row.append(size_label)
+        row.append(f"[red]{s.old.shows_count}[/red]")
+        row.append(f"[red]{s.old.seasons_count}[/red]")
+    if mode in ("all", "movies"):
+        row.append(f"[red]{s.old.movie_size_fmt}[/red]")
+    if mode in ("all", "series"):
+        row.append(f"[red]{s.old.series_size_fmt}[/red]")
     summary.add_row(*row)
 
     # Never watched
     row = ["[bold]Never watched[/bold]"]
     if mode in ("all", "movies"):
-        row.append(f"[dim]{s['never_watched_movie_count']}[/dim]")
+        row.append(f"[purple]{s.never_watched.movie_count}[/purple]")
     if mode in ("all", "series"):
-        row.append(f"[dim]{s['never_watched_series_count']}[/dim]")
+        row.append(f"[purple]{s.never_watched.shows_count}[/purple]")
         row.append("")
-    row.append(f"[dim]{s['never_watched_size_fmt']}[/dim]")
+    if mode in ("all", "movies"):
+        row.append(f"[purple]{s.never_watched.movie_size_fmt}[/purple]")
+    if mode in ("all", "series"):
+        row.append(f"[purple]{s.never_watched.series_size_fmt}[/purple]")
+    summary.add_row(*row)
+
+    # New (unwatched)
+    row = ["[bold]New (unwatched)[/bold]"]
+    if mode in ("all", "movies"):
+        row.append(f"[cyan]{s.never_new.movie_count}[/cyan]")
+    if mode in ("all", "series"):
+        row.append(f"[cyan]{s.never_new.shows_count}[/cyan]")
+        row.append("")
+    if mode in ("all", "movies"):
+        row.append(f"[cyan]{s.never_new.movie_size_fmt}[/cyan]")
+    if mode in ("all", "series"):
+        row.append(f"[cyan]{s.never_new.series_size_fmt}[/cyan]")
     summary.add_row(*row)
 
     # Library
     summary.add_section()
     row = ["Library total"]
     if mode in ("all", "movies"):
-        row.append(str(s['library_movie_count']))
+        row.append(str(s.library.movie_count))
     if mode in ("all", "series"):
-        row.append(str(s['library_series_count']))
+        row.append(str(s.library.shows_count))
         row.append("")
-    row.append(f"[dim]{s['lib_size_fmt']}[/dim]")
+    if mode in ("all", "movies"):
+        row.append(f"[dim]{s.library.movie_size_fmt}[/dim]")
+    if mode in ("all", "series"):
+        row.append(f"[dim]{s.library.series_size_fmt}[/dim]")
     summary.add_row(*row)
 
     row = ["Kept"]
     if mode in ("all", "movies"):
-        row.append(f"[yellow]{s['kept_movie_count']}[/yellow]")
+        row.append(f"[yellow]{s.kept.movie_count}[/yellow]")
     if mode in ("all", "series"):
-        row.append(f"[yellow]{s['kept_shows_count']}[/yellow]")
-        row.append(f"[yellow]{s['kept_seasons_count']}[/yellow]")
-    row.append(f"[yellow]{s['kept_size_fmt']}[/yellow]")
+        row.append(f"[yellow]{s.kept.shows_count}[/yellow]")
+        row.append(f"[yellow]{s.kept.seasons_count}[/yellow]")
+    if mode in ("all", "movies"):
+        row.append(f"[yellow]{s.kept.movie_size_fmt}[/yellow]")
+    if mode in ("all", "series"):
+        row.append(f"[yellow]{s.kept.series_size_fmt}[/yellow]")
     summary.add_row(*row)
 
     # Matching
     summary.add_section()
     row = ["Matched"]
     if mode in ("all", "movies"):
-        row.append(f"[green]{s['matched_movie_count']}[/green]")
+        row.append(f"[green]{s.matching.matched_movie_count}[/green]")
     if mode in ("all", "series"):
-        row.append(f"[green]{s['matched_shows_count']}[/green]")
-        row.append(f"[green]{s['matched_seasons_count']}[/green]")
-    row.append("")
+        row.append(f"[green]{s.matching.matched_shows_count}[/green]")
+        row.append(f"[green]{s.matching.matched_seasons_count}[/green]")
+    if mode in ("all", "movies"):
+        row.append("")
+    if mode in ("all", "series"):
+        row.append("")
     summary.add_row(*row)
 
     row = ["Ambiguous"]
     if mode in ("all", "movies"):
-        row.append(f"[yellow]{s['ambiguous_movie_count']}[/yellow]")
+        row.append(f"[yellow]{s.matching.ambiguous_movie_count}[/yellow]")
     if mode in ("all", "series"):
-        row.append(f"[yellow]{s['ambiguous_shows_count']}[/yellow]")
-        row.append(f"[yellow]{s['ambiguous_seasons_count']}[/yellow]")
-    row.append("")
+        row.append(f"[yellow]{s.matching.ambiguous_shows_count}[/yellow]")
+        row.append(f"[yellow]{s.matching.ambiguous_seasons_count}[/yellow]")
+    if mode in ("all", "movies"):
+        row.append("")
+    if mode in ("all", "series"):
+        row.append("")
+    summary.add_row(*row)
+
+    row = ["Collision"]
+    if mode in ("all", "movies"):
+        row.append(f"[magenta]{s.matching.collision_movie_count}[/magenta]")
+    if mode in ("all", "series"):
+        row.append("")
+        row.append(f"[magenta]{s.matching.collision_season_count}[/magenta]")
+    if mode in ("all", "movies"):
+        row.append("")
+    if mode in ("all", "series"):
+        row.append("")
     summary.add_row(*row)
 
     row = ["Unmatched"]
     if mode in ("all", "movies"):
-        row.append(f"[red]{s['unmatched_movie_count']}[/red]")
+        row.append(f"[red]{s.matching.unmatched_movie_count}[/red]")
     if mode in ("all", "series"):
-        row.append(f"[red]{s['unmatched_shows_count']}[/red]")
-        row.append(f"[red]{s['unmatched_seasons_count']}[/red]")
-    row.append("")
+        row.append(f"[red]{s.matching.unmatched_shows_count}[/red]")
+        row.append(f"[red]{s.matching.unmatched_seasons_count}[/red]")
+    if mode in ("all", "movies"):
+        row.append("")
+    if mode in ("all", "series"):
+        row.append("")
     summary.add_row(*row)
 
     # Episode resolution stats
     if mode in ("all", "series"):
-        if s['fallback_episodes'] or s['skipped_episodes']:
+        if s.episodes.fallback or s.episodes.skipped:
             summary.add_section()
-        if s['fallback_episodes']:
+        if s.episodes.fallback:
             row = ["Episodes resolved via name fallback"]
             if mode == "all":
                 row.append("")
-            row += ["", f"[yellow]{s['fallback_episodes']}[/yellow]", ""]
+            row += ["", f"[yellow]{s.episodes.fallback}[/yellow]"]
+            if mode in ("all", "movies"):
+                row.append("")
+            if mode in ("all", "series"):
+                row.append("")
             summary.add_row(*row)
-        if s['skipped_episodes']:
+        if s.episodes.skipped:
             row = ["Episodes skipped (no data)"]
             if mode == "all":
                 row.append("")
-            row += ["", f"[dim]{s['skipped_episodes']}[/dim]", ""]
+            row += ["", f"[dim]{s.episodes.skipped}[/dim]"]
+            if mode in ("all", "movies"):
+                row.append("")
+            if mode in ("all", "series"):
+                row.append("")
             summary.add_row(*row)
 
     console.print(summary)

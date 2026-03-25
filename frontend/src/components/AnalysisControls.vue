@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useJobStore } from '../stores/jobStore'
 import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
@@ -15,14 +15,29 @@ const modeOptions = [
   { label: 'Series Only', value: 'series' },
 ]
 
-const mode = ref<AnalysisRequest['mode']>('series')
+const mode = ref<AnalysisRequest['mode']>('all')
 const monthThreshold = ref('24')
+const addedThreshold = ref('12')
 const submitting = ref(false)
+const cancelling = ref(false)
+
+async function cancel() {
+  cancelling.value = true
+  await store.cancelCurrentJob()
+}
+
+watch(() => store.isAnalyzing, (v) => {
+  if (!v) cancelling.value = false
+})
 
 async function runAnalysis() {
   submitting.value = true
   try {
-    await store.startAnalysis({ mode: mode.value, monthThreshold: Number(monthThreshold.value) || 24 })
+    await store.startAnalysis({
+      mode: mode.value,
+      monthThreshold: Number(monthThreshold.value) || 24,
+      addedThreshold: Number(addedThreshold.value) || 12,
+    })
   } finally {
     submitting.value = false
   }
@@ -44,12 +59,25 @@ async function runAnalysis() {
       </div>
 
       <div>
-        <label class="block text-xs font-medium text-surface-500 mb-1.5 uppercase tracking-wide">Months</label>
-        <InputText
-          v-model="monthThreshold"
-          type="number"
-          class="w-20"
-        />
+        <label class="flex items-center gap-1.5 text-xs font-medium text-surface-500 mb-1.5 uppercase tracking-wide">
+          Not watched since
+          <i class="pi pi-info-circle text-surface-400 cursor-help" v-tooltip="'Media not watched in this many months is flagged as not recently watched'" />
+        </label>
+        <div class="flex items-center gap-1.5">
+          <InputText v-model="monthThreshold" type="number" class="w-20" />
+          <span class="text-xs text-surface-400">months</span>
+        </div>
+      </div>
+
+      <div>
+        <label class="flex items-center gap-1.5 text-xs font-medium text-surface-500 mb-1.5 uppercase tracking-wide">
+          New if added within
+          <i class="pi pi-info-circle text-surface-400 cursor-help" v-tooltip="'Items that have never been watched but were added to your library within this many months ago are considered new. Items added longer ago that remain unwatched are flagged for cleanup.'" />
+        </label>
+        <div class="flex items-center gap-1.5">
+          <InputText v-model="addedThreshold" type="number" class="w-20" />
+          <span class="text-xs text-surface-400">months</span>
+        </div>
       </div>
 
       <Button
@@ -66,10 +94,11 @@ async function runAnalysis() {
       />
       <Button
         v-else
-        label="Cancel"
-        icon="pi pi-times"
+        :label="cancelling ? 'Cancelling...' : 'Cancel'"
+        :icon="cancelling ? 'pi pi-spin pi-spinner' : 'pi pi-times'"
         severity="danger"
-        @click="store.cancelCurrentJob()"
+        :disabled="cancelling"
+        @click="cancel"
       />
       <Button
         v-if="!store.isAnalyzing && !submitting && store.currentJob?.result"

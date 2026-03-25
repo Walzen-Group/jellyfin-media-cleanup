@@ -30,7 +30,7 @@ const store = useJobStore()
         <TabPanels>
           <TabPanel value="series">
             <div class="pt-4">
-              <SeriesTable :series="store.allSeries" :month-threshold="store.monthThreshold" />
+              <SeriesTable :series="store.allSeries" />
             </div>
           </TabPanel>
           <TabPanel value="movies">

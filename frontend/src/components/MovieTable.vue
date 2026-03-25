@@ -17,6 +17,8 @@ const statusOptions = [
   { label: 'Kept', value: 'kept' },
   { label: 'Unmatched', value: 'unmatched' },
   { label: 'Never Watched', value: 'never' },
+  { label: 'New (unwatched)', value: 'never_new' },
+  { label: 'Collision', value: 'collision' },
 ]
 
 const statusLabels: Record<MediaStatus, string> = {
@@ -26,6 +28,8 @@ const statusLabels: Record<MediaStatus, string> = {
   kept: 'Kept',
   unmatched: 'Unmatched',
   never: 'Never',
+  never_new: 'New',
+  collision: 'Collision'
 }
 
 const statusColors: Record<MediaStatus, string> = {
@@ -35,6 +39,8 @@ const statusColors: Record<MediaStatus, string> = {
   kept: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
   unmatched: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
   never: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  never_new: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
+  collision: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300',
 }
 
 const filters = ref<DataTableFilterMeta>({

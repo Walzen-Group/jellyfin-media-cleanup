@@ -1,6 +1,7 @@
 export interface AnalysisRequest {
   mode: 'all' | 'movies' | 'series'
   monthThreshold: number
+  addedThreshold: number
 }
 
 export interface JobResponse {
@@ -24,13 +25,17 @@ export interface MovieMatch {
   sizeBytes: number
   isAmbiguous: boolean
   ambiguityReason: string | null
+  added: string
+  status: MediaStatus
 }
 
 export interface SeasonInfo {
   seasonNumber: number
   lastPlayed: string
   episodeCount: number
+  totalEpisodes: number
   sizeBytes: number
+  status: MediaStatus
 }
 
 export interface SeriesGroup {
@@ -39,6 +44,7 @@ export interface SeriesGroup {
   matchMethod: string | null
   fuzzyScore: number | null
   sizeBytes: number
+  status: MediaStatus
   seasons: SeasonInfo[]
 }
 
@@ -47,27 +53,78 @@ export interface MediaSection {
   series: SeriesGroup[]
 }
 
+export interface CategoryStats {
+  movieCount: number
+  showsCount: number
+  seasonsCount: number
+  totalSize: number
+  movieSize: number
+  seriesSize: number
+  totalSizeFmt: string
+  movieSizeFmt: string
+  seriesSizeFmt: string
+}
+
+export interface MatchingStats {
+  matchedMovieCount: number
+  matchedShowsCount: number
+  matchedSeasonsCount: number
+  ambiguousMovieCount: number
+  ambiguousShowsCount: number
+  ambiguousSeasonsCount: number
+  unmatchedMovieCount: number
+  unmatchedShowsCount: number
+  unmatchedSeasonsCount: number
+  collisionMovieCount: number
+  collisionSeasonCount: number
+}
+
+export interface EpisodeStats {
+  skipped: number
+  fallback: number
+}
+
+export interface SpaceSavings {
+  seasonsOnlySize: number
+  entireShowsSize: number
+  seasonsOnlySizeFmt: string
+  entireShowsSizeFmt: string
+}
+
+export interface Summary {
+  recent: CategoryStats
+  old: CategoryStats
+  neverWatched: CategoryStats
+  neverNew: CategoryStats
+  library: CategoryStats
+  kept: CategoryStats
+  matching: MatchingStats
+  episodes: EpisodeStats
+  spaceSavings: SpaceSavings
+}
+
 export interface AnalysisResult {
   recentlyWatched: MediaSection
   notRecentlyWatched: MediaSection
   keep: MediaSection
+  collision: MediaSection
   unmatched: MediaSection
   neverWatched: MediaSection
-  summary: Record<string, unknown>
+  neverNew: MediaSection
+  summary: Summary
 }
 
 export interface FullJobResponse extends JobResponse {
   result?: AnalysisResult
 }
 
-export type MediaStatus = 'recent' | 'old' | 'kept' | 'unmatched' | 'mixed' | 'never'
+export type MediaStatus = 'recent' | 'old' | 'kept' | 'unmatched' | 'mixed' | 'never' | 'never_new' | 'collision'
 
 export interface MovieRow extends MovieMatch {
   status: MediaStatus
 }
 
 export interface SeriesRow extends SeriesGroup {
-  status: MediaStatus
   totalEpisodes: number
 }
 

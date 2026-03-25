@@ -19,19 +19,27 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from rapidfuzz import fuzz, process
-from rich.progress import Progress
-from typing import Any, Optional
-
+from typing import Any, Callable, Optional
 from media_cleanup.schema.radarr_schema import Movie
 from media_cleanup.schema.sonarr_schema import Series
 from media_cleanup.types import EpisodeInfo, SeasonSummary
 
 
+
+ProgressCallback = Callable[[str, int, int], None]
+
+
+
 # Minimum similarity score (0–100) for a fuzzy match to be considered valid
-FUZZY_THRESHOLD = 80
+FUZZY_THRESHOLD = 88
 
 # If two candidates score within this margin of each other, flag as ambiguous
 AMBIGUITY_MARGIN = 5
+
+# Minimum length ratio between two titles for a word-boundary or fuzzy match
+# to be accepted.  Prevents "House" (5 chars) matching "House of Guinness" (17).
+# len(shorter) / len(longer) must be >= this value.
+LENGTH_RATIO_THRESHOLD = 0.65
 
 
 # ------------------------------------------------------------------ #
@@ -72,7 +80,7 @@ class MatchResult:
 def match_movies_by_path(
     jellyfin_paths: list[str],
     radarr_movies: list[Movie],
-    progress: Progress | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[list[MatchResult], list[str]]:
     """
     Match Jellyfin file paths to Radarr movies by checking if the movie's
@@ -84,12 +92,10 @@ def match_movies_by_path(
     """
     matched: list[MatchResult] = []
     unmatched_paths: list[str] = []
+    cb = progress_callback or (lambda *_: None)
+    total = len(jellyfin_paths)
 
-    task = None
-    if progress and jellyfin_paths:
-        task = progress.add_task("Path matching movies", total=len(jellyfin_paths))
-
-    for jf_path in jellyfin_paths:
+    for i, jf_path in enumerate(jellyfin_paths):
         found = False
         for movie in radarr_movies:
             if movie.path in jf_path:
@@ -104,8 +110,7 @@ def match_movies_by_path(
                 break
         if not found:
             unmatched_paths.append(jf_path)
-        if progress and task is not None:
-            progress.advance(task)
+        cb("Matching movies by path", i + 1, total)
 
     return matched, unmatched_paths
 
@@ -113,7 +118,7 @@ def match_movies_by_path(
 def fuzzy_match_movies(
     unmatched_paths: list[str],
     radarr_movies: list[Movie],
-    progress: Progress | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> list[MatchResult]:
     """
     Fuzzy fallback for movies that couldn't be matched by path.
@@ -126,7 +131,7 @@ def fuzzy_match_movies(
     # surface as ambiguous — the report includes library_path to tell them apart
     titles = [m.title for m in radarr_movies]
 
-    return _fuzzy_match_paths(unmatched_paths, titles, radarr_movies, "Fuzzy matching movies", progress)
+    return _fuzzy_match_paths(unmatched_paths, titles, radarr_movies, "Fuzzy matching movies", progress_callback)
 
 
 # ------------------------------------------------------------------ #
@@ -194,7 +199,7 @@ def build_season_summaries(
 def match_seasons_to_sonarr(
     seasons: list[SeasonSummary],
     sonarr_series: list[Series],
-    progress: Progress | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> tuple[list[SeasonSummary], list[SeasonSummary]]:
     """
     Enrich SeasonSummary objects with Sonarr path data by matching
@@ -212,12 +217,10 @@ def match_seasons_to_sonarr(
 
     matched: list[SeasonSummary] = []
     unmatched: list[SeasonSummary] = []
+    cb = progress_callback or (lambda *_: None)
+    total = len(seasons)
 
-    task = None
-    if progress and seasons:
-        task = progress.add_task("Matching seasons to Sonarr", total=len(seasons))
-
-    for season in seasons:
+    for i, season in enumerate(seasons):
         # --- Primary: check if any Sonarr series path appears in the season's
         #     series_name (a loose check since we only have the name from Jellyfin)
         path_match = _path_match_season(season, sonarr_series)
@@ -226,8 +229,7 @@ def match_seasons_to_sonarr(
             season.match_method = "path"
             season.size_on_disk = _get_season_size(path_match, season.season_number)
             matched.append(season)
-            if progress and task is not None:
-                progress.advance(task)
+            cb("Matching seasons", i + 1, total)
             continue
 
         # --- Fallback: fuzzy match series name against Sonarr titles
@@ -238,7 +240,11 @@ def match_seasons_to_sonarr(
             limit=3
         )
 
-        if top_matches and top_matches[0][1] >= FUZZY_THRESHOLD:
+        if (
+            top_matches
+            and top_matches[0][1] >= FUZZY_THRESHOLD
+            and _length_ratio(season.series_name, top_matches[0][0]) >= LENGTH_RATIO_THRESHOLD
+        ):
             best_title, best_score, best_idx = top_matches[0]
             ambiguous = [
                 {
@@ -248,6 +254,7 @@ def match_seasons_to_sonarr(
                 }
                 for title, score, idx in top_matches[1:]
                 if score >= FUZZY_THRESHOLD and (best_score - score) <= AMBIGUITY_MARGIN
+                and _length_ratio(season.series_name, title) >= LENGTH_RATIO_THRESHOLD
             ]
             season.matched_sonarr_path = sonarr_series[best_idx].path
             season.match_method = "fuzzy"
@@ -258,8 +265,7 @@ def match_seasons_to_sonarr(
         else:
             unmatched.append(season)
 
-        if progress and task is not None:
-            progress.advance(task)
+        cb("Matching seasons", i + 1, total)
 
     return matched, unmatched
 
@@ -273,16 +279,36 @@ def _get_season_size(series: Series, season_number: int) -> int:
     return series.statistics.size_on_disk if season_number == -1 else 0
 
 
+def _length_ratio(a: str, b: str) -> float:
+    """Return len(shorter) / len(longer), or 1.0 if both are empty."""
+    la, lb = len(a), len(b)
+    if la == 0 and lb == 0:
+        return 1.0
+    return min(la, lb) / max(la, lb)
+
+
 def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Optional[Series]:
     """
     Try to match a season's series_name to a Sonarr series by checking
-    if the Sonarr series title is contained in the Jellyfin series name
-    (case-insensitive). This handles minor naming differences.
+    if the Sonarr series title matches the Jellyfin series name as whole
+    words (case-insensitive). Uses word boundary regex to avoid substring
+    false positives like "House" matching "Housewives".
+
+    Word-boundary matches also require a minimum length ratio so that a short
+    title like "House" cannot match inside "House of Guinness".
     """
     name_lower = season.series_name.lower()
     for series in sonarr_series:
-        if series.title.lower() in name_lower or name_lower in series.title.lower():
+        title_lower = series.title.lower()
+        # Exact match — always accept
+        if title_lower == name_lower:
             return series
+        # Word-boundary match only when the two titles are of comparable length
+        if _length_ratio(title_lower, name_lower) >= LENGTH_RATIO_THRESHOLD:
+            if re.search(r'\b' + re.escape(title_lower) + r'\b', name_lower):
+                return series
+            if re.search(r'\b' + re.escape(name_lower) + r'\b', title_lower):
+                return series
     return None
 
 
@@ -295,7 +321,7 @@ def _fuzzy_match_paths(
     candidate_titles: list[str],
     candidate_items: list[Movie],
     description: str = "Fuzzy matching",
-    progress: Progress | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> list[MatchResult]:
     """
     Core fuzzy matching logic for movie file paths.
@@ -310,17 +336,14 @@ def _fuzzy_match_paths(
     3. Accept if above FUZZY_THRESHOLD; flag ambiguous if multiple close scores.
     """
     results: list[MatchResult] = []
+    cb = progress_callback or (lambda *_: None)
+    total = len(unmatched_paths)
 
-    task = None
-    if progress and unmatched_paths:
-        task = progress.add_task(description, total=len(unmatched_paths))
-
-    for path in unmatched_paths:
+    for i, path in enumerate(unmatched_paths):
         guessed_title = _extract_title_from_path(path)
         if not guessed_title:
             results.append(MatchResult(jellyfin_path=path))
-            if progress and task is not None:
-                progress.advance(task)
+            cb(description, i + 1, total)
             continue
 
         top_matches = process.extract(
@@ -330,10 +353,13 @@ def _fuzzy_match_paths(
             limit=5
         )
 
-        if not top_matches or top_matches[0][1] < FUZZY_THRESHOLD:
+        if (
+            not top_matches
+            or top_matches[0][1] < FUZZY_THRESHOLD
+            or _length_ratio(guessed_title, top_matches[0][0]) < LENGTH_RATIO_THRESHOLD
+        ):
             results.append(MatchResult(jellyfin_path=path))
-            if progress and task is not None:
-                progress.advance(task)
+            cb(description, i + 1, total)
             continue
 
         best_title, best_score, best_idx = top_matches[0]
@@ -348,6 +374,7 @@ def _fuzzy_match_paths(
             }
             for title, score, idx in top_matches[1:]
             if score >= FUZZY_THRESHOLD and (best_score - score) <= AMBIGUITY_MARGIN
+            and _length_ratio(guessed_title, title) >= LENGTH_RATIO_THRESHOLD
         ]
 
         # Determine why this match is ambiguous, if at all
@@ -369,8 +396,7 @@ def _fuzzy_match_paths(
             size_on_disk=best_item.size_on_disk,
         ))
 
-        if progress and task is not None:
-            progress.advance(task)
+        cb(description, i + 1, total)
 
     return results
 

@@ -205,7 +205,7 @@ class JellyfinClient:
                 # in the fallback pass below
                 if not series_name or season_number is None or not media_sources:
                     resolved_count += 1
-                    cb(f"Resolving episodes", resolved_count, len(ids))
+                    cb("Resolving episodes", resolved_count, len(ids))
                     continue
 
                 resolved_ids.add(item_id)
@@ -225,7 +225,7 @@ class JellyfinClient:
             missing_count = len(chunk) - len(returned_ids)
             if missing_count > 0:
                 resolved_count += missing_count
-                cb(f"Resolving episodes", resolved_count, len(ids))
+                cb("Resolving episodes", resolved_count, len(ids))
 
         # ----- Fallback: use ItemName from PlaybackActivity for unresolved IDs -----
         unresolved_ids = set(ids) - resolved_ids

@@ -5,6 +5,7 @@ Extracts the orchestration logic from launch.py so it can be driven by
 the CLI, a FastAPI endpoint, or any other caller.
 """
 
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -47,6 +48,8 @@ class CleanupResult:
     recent_seasons_unmatched: list[SeasonSummary] = field(default_factory=list)
     old_seasons_unmatched: list[SeasonSummary] = field(default_factory=list)
     kept_season_matches: list[SeasonSummary] = field(default_factory=list)
+    collision_movie_matches: list[MatchResult] = field(default_factory=list)
+    collision_season_matches: list[SeasonSummary] = field(default_factory=list)
     all_movies: list[Movie] = field(default_factory=list)
     all_series: list[Series] = field(default_factory=list)
     episodes: list[EpisodeInfo] = field(default_factory=list)
@@ -85,32 +88,7 @@ class CleanupService:
         result = CleanupResult()
         raw_cb = progress_callback or (lambda *_: None)
 
-        # Define step weights so progress is a single 0→100 bar.
-        # Episode resolution is the heaviest step (~60% of wall time).
-        movie_steps = [
-            ("Querying Jellyfin movie history", 2),
-            ("Resolving movie paths", 3),
-            ("Fetching Radarr library", 5),
-            ("Matching movies", 5),
-        ]
-        series_steps = [
-            ("Querying Jellyfin episode history", 2),
-            ("Resolving episodes", 60),
-            ("Fetching Sonarr library", 8),
-            ("Matching seasons", 5),
-        ]
-        steps: list[tuple[str, int]] = []
-        if mode in ("all", "movies"):
-            steps += movie_steps
-        if mode in ("all", "series"):
-            steps += series_steps
-
-        total_weight = sum(w for _, w in steps)
-        step_offsets: dict[str, tuple[int, int]] = {}  # base_name -> (offset, weight)
-        offset = 0
-        for name, weight in steps:
-            step_offsets[name] = (offset, weight)
-            offset += weight
+        step_offsets, total_weight = get_pipeline_steps(mode)
 
         def cb(step: str, current: int, total: int) -> None:
             """Translate per-step (current/total) into global progress."""
@@ -145,12 +123,13 @@ class CleanupService:
 
             self._check_cancel(cancel_check)
 
-            recent_movie_paths = jellyfin.get_file_paths(
-                recent_movie_ids, progress_callback=lambda s, c, t: cb("Resolving movie paths", c, t),
-                desc="Resolving movie paths") if recent_movie_ids else []
-            old_movie_paths = jellyfin.get_file_paths(
-                old_movie_ids, progress_callback=lambda s, c, t: cb("Resolving movie paths", c, t),
-                desc="Resolving movie paths") if old_movie_ids else []
+            all_movie_paths = jellyfin.get_file_paths(
+                recent_movie_ids + old_movie_ids,
+                progress_callback=lambda s, c, t: cb("Resolving movie paths", c, t),
+                desc="Resolving movie paths",
+            )
+            recent_movie_paths = all_movie_paths[:len(recent_movie_ids)]
+            old_movie_paths = all_movie_paths[len(recent_movie_ids):]
 
             self._check_cancel(cancel_check)
 
@@ -164,27 +143,43 @@ class CleanupService:
 
             self._check_cancel(cancel_check)
 
-            cb("Matching movies", 0, 2)
             recent_movie_matches, recent_unmatched = match_movies_by_path(
-                recent_movie_paths, result.all_movies)
+                recent_movie_paths, result.all_movies,
+                progress_callback=lambda s, c, t: cb("Matching movies", c, t))
             old_movie_matches, old_unmatched = match_movies_by_path(
-                old_movie_paths, result.all_movies)
-            cb("Matching movies", 1, 2)
-            recent_movie_matches += fuzzy_match_movies(recent_unmatched, result.all_movies)
-            old_movie_matches += fuzzy_match_movies(old_unmatched, result.all_movies)
-            cb("Matching movies", 2, 2)
+                old_movie_paths, result.all_movies,
+                progress_callback=lambda s, c, t: cb("Matching movies", c, t))
+            recent_movie_matches += fuzzy_match_movies(
+                recent_unmatched, result.all_movies,
+                progress_callback=lambda s, c, t: cb("Matching movies", c, t))
+            old_movie_matches += fuzzy_match_movies(
+                old_unmatched, result.all_movies,
+                progress_callback=lambda s, c, t: cb("Matching movies", c, t))
 
+            # Detect movie collisions: multiple Jellyfin items -> same library path
+            path_counts = Counter(
+                m.matched_path for m in recent_movie_matches + old_movie_matches
+                if m.matched_path
+            )
+            collision_movie_paths = {p for p, c in path_counts.items() if c > 1}
+
+            result.collision_movie_matches = [
+                m for m in recent_movie_matches + old_movie_matches
+                if m.matched_path in collision_movie_paths
+            ]
             result.kept_movie_matches = [
                 m for m in recent_movie_matches + old_movie_matches
                 if m.matched_path in kept_movie_paths
+                and m.matched_path not in collision_movie_paths
             ]
+            exclude_movie_paths = kept_movie_paths | collision_movie_paths
             result.recent_movie_matches = [
                 m for m in recent_movie_matches
-                if m.matched_path not in kept_movie_paths
+                if m.matched_path not in exclude_movie_paths
             ]
             result.old_movie_matches = [
                 m for m in old_movie_matches
-                if m.matched_path not in kept_movie_paths
+                if m.matched_path not in exclude_movie_paths
             ]
 
         # ===== SERIES =====
@@ -220,24 +215,41 @@ class CleanupService:
 
             recent_seasons, old_seasons = build_season_summaries(result.episodes, threshold)
 
-            cb("Matching seasons", 0, 2)
+            n_recent = len(recent_seasons)
+            n_total = n_recent + len(old_seasons)
+            def _seasons_cb(_, c, t):
+                cb("Matching seasons", c, n_total)
+            def _seasons_cb2(_, c, t):
+                cb("Matching seasons", n_recent + c, n_total)
             recent_matched, recent_unmatched = match_seasons_to_sonarr(
-                recent_seasons, result.all_series)
+                recent_seasons, result.all_series, progress_callback=_seasons_cb)
             old_matched, old_unmatched = match_seasons_to_sonarr(
-                old_seasons, result.all_series)
-            cb("Matching seasons", 2, 2)
+                old_seasons, result.all_series, progress_callback=_seasons_cb2)
 
+            # Detect series collisions: different series names -> same Sonarr path
+            path_to_names: dict[str, set[str]] = defaultdict(set)
+            for s in recent_matched + old_matched:
+                if s.matched_sonarr_path:
+                    path_to_names[s.matched_sonarr_path].add(s.series_name)
+            collision_series_paths = {p for p, names in path_to_names.items() if len(names) > 1}
+
+            result.collision_season_matches = [
+                s for s in recent_matched + old_matched
+                if s.matched_sonarr_path in collision_series_paths
+            ]
+            exclude_series_paths = kept_series_paths | collision_series_paths
             result.kept_season_matches = [
                 s for s in recent_matched + old_matched
                 if s.matched_sonarr_path in kept_series_paths
+                and s.matched_sonarr_path not in collision_series_paths
             ]
             result.recent_seasons_matched = [
                 s for s in recent_matched
-                if s.matched_sonarr_path not in kept_series_paths
+                if s.matched_sonarr_path not in exclude_series_paths
             ]
             result.old_seasons_matched = [
                 s for s in old_matched
-                if s.matched_sonarr_path not in kept_series_paths
+                if s.matched_sonarr_path not in exclude_series_paths
             ]
             result.recent_seasons_unmatched = recent_unmatched
             result.old_seasons_unmatched = old_unmatched
@@ -255,125 +267,40 @@ class CleanupService:
 
 
 # ------------------------------------------------------------------ #
-#  Summary computation (presentation-agnostic)
+#  Pipeline step metadata (shared between service and CLI)
 # ------------------------------------------------------------------ #
 
-def _unique_shows(seasons: list[SeasonSummary]) -> int:
-    return len({s.series_name for s in seasons})
+MOVIE_STEPS: list[tuple[str, int]] = [
+    ("Querying Jellyfin movie history", 2),
+    ("Resolving movie paths", 3),
+    ("Fetching Radarr library", 5),
+    ("Matching movies", 5),
+]
+SERIES_STEPS: list[tuple[str, int]] = [
+    ("Querying Jellyfin episode history", 2),
+    ("Resolving episodes", 60),
+    ("Fetching Sonarr library", 8),
+    ("Matching seasons", 5),
+]
 
 
-def _movie_size(matches: list[MatchResult]) -> int:
-    return sum(m.size_on_disk for m in matches)
-
-
-def _season_size(seasons: list[SeasonSummary]) -> int:
-    return sum(s.size_on_disk for s in seasons)
-
-
-def _format_size(total_bytes: int) -> str:
-    gb = total_bytes / (1024 ** 3)
-    if gb >= 1024:
-        return f"{gb / 1024:.1f} TB"
-    return f"{gb:.1f} GB"
-
-
-def build_summary(result: CleanupResult, mode: str = "all") -> dict:
+def get_pipeline_steps(mode: str) -> tuple[dict[str, tuple[int, int]], int]:
     """
-    Compute summary statistics from a CleanupResult.
+    Return ``(step_offsets, total_weight)`` for the given analysis mode.
 
-    Returns a dict with all the counts and sizes needed to render a
-    summary table (CLI) or return as JSON (API).
+    ``step_offsets`` maps each base step name to ``(global_offset, weight)``
+    so callers can convert global progress values back to per-step local ones.
     """
-    recent_size = _movie_size(result.recent_movie_matches) + _season_size(result.recent_seasons_matched)
-    old_size = _movie_size(result.old_movie_matches) + _season_size(result.old_seasons_matched)
-    kept_size = _movie_size(result.kept_movie_matches) + _season_size(result.kept_season_matches)
+    steps: list[tuple[str, int]] = []
+    if mode in ("all", "movies"):
+        steps += MOVIE_STEPS
+    if mode in ("all", "series"):
+        steps += SERIES_STEPS
+    total_weight = sum(w for _, w in steps)
+    offsets: dict[str, tuple[int, int]] = {}
+    offset = 0
+    for name, weight in steps:
+        offsets[name] = (offset, weight)
+        offset += weight
+    return offsets, total_weight
 
-    lib_size = (
-        sum(m.size_on_disk for m in result.all_movies)
-        + sum(s.statistics.size_on_disk for s in result.all_series)
-    )
-    never_watched_size = lib_size - recent_size - old_size - kept_size
-
-    # Never-watched items
-    all_movie_matches = result.recent_movie_matches + result.old_movie_matches
-    watched_movie_paths = {
-        m.matched_path for m in all_movie_matches + result.kept_movie_matches if m.matched_path
-    }
-    never_watched_movies = [m for m in result.all_movies if m.path not in watched_movie_paths]
-
-    all_season_matches = (
-        result.recent_seasons_matched + result.old_seasons_matched + result.kept_season_matches
-    )
-    watched_series_paths = {
-        s.matched_sonarr_path for s in all_season_matches if s.matched_sonarr_path
-    }
-    never_watched_series = [s for s in result.all_series if s.path not in watched_series_paths]
-
-    # Matching stats
-    matched_seasons = result.recent_seasons_matched + result.old_seasons_matched
-    all_seasons_list = (
-        result.recent_seasons_matched + result.recent_seasons_unmatched
-        + result.old_seasons_matched + result.old_seasons_unmatched
-    )
-    unmatched_seasons = result.recent_seasons_unmatched + result.old_seasons_unmatched
-
-    # Space savings
-    seasons_only_size = _movie_size(result.old_movie_matches) + _season_size(result.old_seasons_matched)
-    entire_shows_size = _movie_size(result.old_movie_matches)
-    if mode in ("all", "series") and result.old_seasons_matched:
-        series_by_path = {s.path: s for s in result.all_series}
-        old_series_paths = {
-            s.matched_sonarr_path for s in result.old_seasons_matched if s.matched_sonarr_path
-        }
-        entire_shows_size += sum(
-            series_by_path[p].statistics.size_on_disk
-            for p in old_series_paths if p in series_by_path
-        )
-
-    # Episode resolution stats
-    skipped_episodes = len(result.episode_dates) - len(result.episodes)
-    fallback_episodes = sum(1 for ep in result.episodes if ep.season_number == -1)
-
-    return {
-        # Counts
-        "recent_movie_count": len(result.recent_movie_matches),
-        "old_movie_count": len(result.old_movie_matches),
-        "recent_shows_count": _unique_shows(result.recent_seasons_matched),
-        "recent_seasons_count": len(result.recent_seasons_matched),
-        "old_shows_count": _unique_shows(result.old_seasons_matched),
-        "old_seasons_count": len(result.old_seasons_matched),
-        "never_watched_movie_count": len(never_watched_movies),
-        "never_watched_series_count": len(never_watched_series),
-        "library_movie_count": len(result.all_movies),
-        "library_series_count": len(result.all_series),
-        "kept_movie_count": len(result.kept_movie_matches),
-        "kept_shows_count": _unique_shows(result.kept_season_matches),
-        "kept_seasons_count": len(result.kept_season_matches),
-        "matched_movie_count": sum(1 for m in all_movie_matches if m.is_matched),
-        "matched_shows_count": _unique_shows(matched_seasons),
-        "matched_seasons_count": len(matched_seasons),
-        "ambiguous_movie_count": sum(1 for m in all_movie_matches if m.is_ambiguous),
-        "ambiguous_shows_count": _unique_shows([s for s in all_seasons_list if s.is_ambiguous]),
-        "ambiguous_seasons_count": sum(1 for s in all_seasons_list if s.is_ambiguous),
-        "unmatched_movie_count": sum(1 for m in all_movie_matches if not m.is_matched),
-        "unmatched_shows_count": _unique_shows(unmatched_seasons),
-        "unmatched_seasons_count": len(unmatched_seasons),
-        "skipped_episodes": skipped_episodes,
-        "fallback_episodes": fallback_episodes,
-        # Sizes (bytes)
-        "recent_size": recent_size,
-        "old_size": old_size,
-        "kept_size": kept_size,
-        "lib_size": lib_size,
-        "never_watched_size": never_watched_size,
-        "seasons_only_size": seasons_only_size,
-        "entire_shows_size": entire_shows_size,
-        # Formatted sizes (human-readable)
-        "recent_size_fmt": _format_size(recent_size),
-        "old_size_fmt": _format_size(old_size),
-        "kept_size_fmt": _format_size(kept_size),
-        "lib_size_fmt": _format_size(lib_size),
-        "never_watched_size_fmt": _format_size(never_watched_size),
-        "seasons_only_size_fmt": _format_size(seasons_only_size),
-        "entire_shows_size_fmt": _format_size(entire_shows_size),
-    }

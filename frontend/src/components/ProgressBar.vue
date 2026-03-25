@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
 import PrimeProgressBar from 'primevue/progressbar'
 
 defineProps<{
@@ -7,6 +8,38 @@ defineProps<{
   stepIndex?: number
   totalSteps?: number
 }>()
+
+const vibes = [
+  'cringlebingling...',
+  'defragulating...',
+  'hooting...',
+  'wrangling...',
+  'snorkelizing...',
+  'discombobulating...',
+  'fluxinating...',
+  'schmoozing...',
+  'murkyflurking...',
+  'perambulating...',
+  'razzledazzling...',
+  'gizoogling...',
+  'cradanceparancing...',
+  'boingzoinging...',
+  'seesawing...',
+  'humpteedumpting...',
+]
+
+const currentVibe = ref(vibes[0])
+let vibeIndex = 0
+let timer: ReturnType<typeof setInterval>
+
+onMounted(() => {
+  timer = setInterval(() => {
+    vibeIndex = (vibeIndex + 1) % vibes.length
+    currentVibe.value = vibes[vibeIndex]
+  }, 3000)
+})
+
+onUnmounted(() => clearInterval(timer))
 </script>
 
 <template>
@@ -19,6 +52,7 @@ defineProps<{
       <span class="tabular-nums">
         {{ Math.round(percent) }}%
         <span v-if="stepIndex && totalSteps" class="text-surface-400 ml-1.5">({{ stepIndex }}/{{ totalSteps }})</span>
+        <span class="text-surface-400 ml-2 italic font-normal">{{ currentVibe }}</span>
       </span>
     </div>
     <PrimeProgressBar :value="Math.min(Math.round(percent), 100)" :showValue="false" style="height: 20px" class="striped-progress" />

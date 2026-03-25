@@ -15,7 +15,7 @@ from typing import Callable
 
 from media_cleanup.config import AppConfig, load_config
 from media_cleanup.service import CancellationError, CleanupService
-from media_cleanup.server.models import (
+from media_cleanup.models import (
     AnalysisRequest,
     AnalysisResult,
     JobStatus,
@@ -68,8 +68,17 @@ class JobManager:
 
         self._broadcast({
             "type": "job_created",
-            "jobId": job.job_id,
-            "status": job.status.value,
+            "job": {
+                "jobId": job.job_id,
+                "status": job.status.value,
+                "progressPercent": 0,
+                "progressStep": "Queued",
+                "stepIndex": 0,
+                "totalSteps": 0,
+                "createdAt": job.created_at,
+                "completedAt": None,
+                "error": None,
+            },
         })
 
         self._ensure_worker()
@@ -221,7 +230,8 @@ class JobManager:
                 progress_callback=progress_cb,
                 cancel_check=cancel_ck,
             )
-            job.result = cleanup_result_to_response(cleanup_result, job.request.mode)
+            job.result = cleanup_result_to_response(
+                cleanup_result, job.request.mode, job.request.added_threshold)
             job.status = JobStatus.complete
             job.completed_at = datetime.now(timezone.utc).isoformat()
             job.progress_percent = 1.0

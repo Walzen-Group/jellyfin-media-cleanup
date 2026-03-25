@@ -1,36 +1,70 @@
 <script setup lang="ts">
+import type { Summary, CategoryStats, MatchingStats } from '../types/api'
+
 const props = defineProps<{
-  summary: Record<string, unknown>
+  summary: Summary
 }>()
 
-function n(key: string): string {
-  const v = props.summary[key]
-  if (typeof v === 'number') return v.toLocaleString()
-  return String(v ?? '')
+function n(val: number): string {
+  return val.toLocaleString()
 }
 
-function fmt(key: string): string {
-  return String(props.summary[key] ?? '-')
+function fmt(val: string): string {
+  return val || '-'
 }
 
-type Row = { label: string; movies?: string; shows?: string; seasons?: string; size?: string; cls: string; sep?: boolean }
+type Row = {
+  label: string
+  movies?: string; shows?: string; seasons?: string
+  movieSize?: string; seriesSize?: string
+  cls: string; sep?: boolean
+}
+
+function catRow(label: string, cat: CategoryStats, cls: string, showSeasons = true): Row {
+  return {
+    label,
+    movies: n(cat.movieCount),
+    shows: n(cat.showsCount),
+    seasons: showSeasons ? n(cat.seasonsCount) : '',
+    movieSize: fmt(cat.movieSizeFmt),
+    seriesSize: fmt(cat.seriesSizeFmt),
+    cls,
+  }
+}
+
+function matchRow(label: string, movieKey: keyof MatchingStats, showsKey: keyof MatchingStats, seasonsKey: keyof MatchingStats, cls: string): Row {
+  return {
+    label,
+    movies: n(props.summary.matching[movieKey] as number),
+    shows: n(props.summary.matching[showsKey] as number),
+    seasons: n(props.summary.matching[seasonsKey] as number),
+    cls,
+  }
+}
 
 const rows: Row[] = [
-  { label: 'Recently watched', movies: 'recent_movie_count', shows: 'recent_shows_count', seasons: 'recent_seasons_count', size: 'recent_size_fmt', cls: 'text-green-500 dark:text-green-400' },
-  { label: 'Not recently watched', movies: 'old_movie_count', shows: 'old_shows_count', seasons: 'old_seasons_count', size: 'old_size_fmt', cls: 'text-red-500 dark:text-red-400' },
-  { label: 'Never watched', movies: 'never_watched_movie_count', shows: 'never_watched_series_count', size: 'never_watched_size_fmt', cls: 'text-surface-400' },
+  catRow('Recently watched', props.summary.recent, 'text-green-500 dark:text-green-400'),
+  catRow('Not recently watched', props.summary.old, 'text-red-500 dark:text-red-400'),
+  catRow('Never watched', props.summary.neverWatched, 'text-purple-500 dark:text-purple-400', false),
+  catRow('New (unwatched)', props.summary.neverNew, 'text-cyan-500 dark:text-cyan-400', false),
   { label: '', sep: true, cls: '' },
-  { label: 'Library total', movies: 'library_movie_count', shows: 'library_series_count', size: 'lib_size_fmt', cls: 'text-surface-400' },
-  { label: 'Kept', movies: 'kept_movie_count', shows: 'kept_shows_count', seasons: 'kept_seasons_count', size: 'kept_size_fmt', cls: 'text-yellow-500 dark:text-yellow-400' },
+  catRow('Library total', props.summary.library, 'text-surface-400', false),
+  catRow('Kept', props.summary.kept, 'text-yellow-500 dark:text-yellow-400'),
   { label: '', sep: true, cls: '' },
-  { label: 'Matched', movies: 'matched_movie_count', shows: 'matched_shows_count', seasons: 'matched_seasons_count', cls: 'text-green-500 dark:text-green-400' },
-  { label: 'Ambiguous', movies: 'ambiguous_movie_count', shows: 'ambiguous_shows_count', seasons: 'ambiguous_seasons_count', cls: 'text-yellow-500 dark:text-yellow-400' },
-  { label: 'Unmatched', movies: 'unmatched_movie_count', shows: 'unmatched_shows_count', seasons: 'unmatched_seasons_count', cls: 'text-red-500 dark:text-red-400' },
+  matchRow('Matched', 'matchedMovieCount', 'matchedShowsCount', 'matchedSeasonsCount', 'text-green-500 dark:text-green-400'),
+  matchRow('Ambiguous', 'ambiguousMovieCount', 'ambiguousShowsCount', 'ambiguousSeasonsCount', 'text-yellow-500 dark:text-yellow-400'),
+  {
+    label: 'Collision',
+    movies: n(props.summary.matching.collisionMovieCount),
+    seasons: n(props.summary.matching.collisionSeasonCount),
+    cls: 'text-fuchsia-500 dark:text-fuchsia-400',
+  },
+  matchRow('Unmatched', 'unmatchedMovieCount', 'unmatchedShowsCount', 'unmatchedSeasonsCount', 'text-red-500 dark:text-red-400'),
 ]
 </script>
 
 <template>
-  <div class="card overflow-hidden">
+  <div class="card overflow-x-auto">
     <div class="px-4 py-3">
       <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Summary</h2>
     </div>
@@ -41,22 +75,24 @@ const rows: Row[] = [
           <th class="px-4 py-2 text-right">Movies</th>
           <th class="px-4 py-2 text-right">Shows</th>
           <th class="px-4 py-2 text-right">Seasons</th>
-          <th class="px-4 py-2 text-right">Size</th>
+          <th class="px-4 py-2 text-right">Movie Size</th>
+          <th class="px-4 py-2 text-right">Series Size</th>
         </tr>
       </thead>
       <tbody>
         <template v-for="(row, i) in rows" :key="i">
           <tr v-if="row.sep" class="h-px">
-            <td colspan="5" class="p-0">
+            <td colspan="6" class="p-0">
               <div class="border-t border-surface-100 dark:border-surface-800"></div>
             </td>
           </tr>
           <tr v-else>
             <td class="px-4 py-2 text-surface-300 dark:text-surface-500 font-medium">{{ row.label }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.movies ? n(row.movies) : '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.shows ? n(row.shows) : '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seasons ? n(row.seasons) : '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.size ? fmt(row.size) : '' }}</td>
+            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.movies ?? '' }}</td>
+            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.shows ?? '' }}</td>
+            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seasons ?? '' }}</td>
+            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.movieSize ?? '' }}</td>
+            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seriesSize ?? '' }}</td>
           </tr>
         </template>
       </tbody>
