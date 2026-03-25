@@ -1,6 +1,10 @@
 # ---- Stage 1: Build frontend ----
 FROM node:22-alpine AS frontend-build
 
+# Git hash passed from docker compose build for version display in the UI
+ARG GIT_HASH=unknown
+ENV VITE_GIT_HASH=$GIT_HASH
+
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 WORKDIR /app/frontend

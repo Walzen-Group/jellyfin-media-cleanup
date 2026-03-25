@@ -123,14 +123,25 @@ class CleanupService:
 
             self._check_cancel(cancel_check)
 
-            all_movie_paths = jellyfin.get_file_paths(
-                recent_movie_ids + old_movie_ids,
-                progress_callback=lambda s, c, t: cb("Resolving movie paths", c, t),
+            # Resolve recent and old paths separately. Jellyfin silently drops
+            # stale IDs, so a combined call returns fewer results than inputs
+            # and the slice indices would be wrong.
+            # Progress uses offset-based totals so first call fills 0-50%, second 50-100%.
+            n_recent_chunks = max(1, -(-len(recent_movie_ids) // jellyfin.chunk_length))
+            n_old_chunks = max(1, -(-len(old_movie_ids) // jellyfin.chunk_length))
+            n_total_chunks = n_recent_chunks + n_old_chunks
+            recent_movie_paths = jellyfin.get_file_paths(
+                recent_movie_ids,
+                progress_callback=lambda s, c, t: cb("Resolving movie paths", c, n_total_chunks),
                 desc="Resolving movie paths",
                 cancel_check=cancel_check,
             )
-            recent_movie_paths = all_movie_paths[:len(recent_movie_ids)]
-            old_movie_paths = all_movie_paths[len(recent_movie_ids):]
+            old_movie_paths = jellyfin.get_file_paths(
+                old_movie_ids,
+                progress_callback=lambda s, c, t: cb("Resolving movie paths", n_recent_chunks + c, n_total_chunks),
+                desc="Resolving movie paths",
+                cancel_check=cancel_check,
+            )
 
             self._check_cancel(cancel_check)
 

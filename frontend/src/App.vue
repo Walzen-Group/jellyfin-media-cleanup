@@ -13,6 +13,8 @@ onMessage((msg) => store.handleWebSocketMessage(msg))
 
 // Provide WebSocket connection state so child components can disable actions when disconnected
 provide('wsConnected', isConnected)
+
+const gitHash = __GIT_HASH__
 </script>
 
 <template>
@@ -30,6 +32,7 @@ provide('wsConnected', isConnected)
       </h1>
       <div class="flex items-center gap-4">
         <ThemeToggle />
+        <span class="text-xs text-indigo-300/60 font-mono">{{ gitHash }}</span>
         <div class="flex items-center gap-2 text-sm text-indigo-200">
           <span
             class="inline-block w-2 h-2 rounded-full"

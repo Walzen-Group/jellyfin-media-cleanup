@@ -1,6 +1,9 @@
 services:
   jellyfin-media-cleanup:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_HASH: "${GIT_HASH:-unknown}"
     ports:
       - "8000:8000"
     env_file:
