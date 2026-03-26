@@ -37,6 +37,8 @@ class SeasonSummary:
     fuzzy_score: Optional[float] = None
     # Each candidate is a dict with "title", "library_path", and "score"
     ambiguous_candidates: list[dict[str, Any]] = field(default_factory=list)
+    # True for synthetic seasons generated from Sonarr data (no Jellyfin watch history)
+    is_unwatched: bool = False
 
     @property
     def is_matched(self) -> bool:

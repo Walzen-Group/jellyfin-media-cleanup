@@ -239,6 +239,51 @@ class CleanupService:
             old_matched, old_unmatched = match_seasons_to_sonarr(
                 old_seasons, result.all_series, progress_callback=_seasons_cb2)
 
+            # Generate synthetic SeasonSummary objects for unwatched seasons
+            # within matched series. These fill the gap where a show has some
+            # watched seasons but others were never played.
+            # Classification: if the show has any recently watched sibling season,
+            # the synthetic goes into recent_matched (show is active, season is
+            # just not-yet-watched). If all siblings are old, it goes into
+            # old_matched (show is abandoned).
+            all_matched = recent_matched + old_matched
+            series_by_path = {s.path: s for s in result.all_series}
+            watched_keys: set[tuple[str, int]] = set()
+            path_to_name: dict[str, str] = {}
+            recent_series_paths = {s.matched_sonarr_path for s in recent_matched if s.matched_sonarr_path}
+            for s in all_matched:
+                if s.matched_sonarr_path:
+                    watched_keys.add((s.matched_sonarr_path, s.season_number))
+                    path_to_name[s.matched_sonarr_path] = s.series_name
+
+            for path, name in path_to_name.items():
+                sonarr = series_by_path.get(path)
+                if not sonarr:
+                    continue
+                has_recent_sibling = path in recent_series_paths
+                for sonarr_season in sonarr.seasons:
+                    sn = sonarr_season.season_number
+                    if sn == 0:  # skip specials
+                        continue
+                    if (path, sn) in watched_keys:
+                        continue
+                    if sonarr_season.statistics.size_on_disk == 0:
+                        continue  # no files on disk for this season
+                    synthetic = SeasonSummary(
+                        series_name=name,
+                        season_number=sn,
+                        last_played="",
+                        episode_count=0,
+                        size_on_disk=sonarr_season.statistics.size_on_disk,
+                        matched_sonarr_path=path,
+                        match_method="synthetic",
+                        is_unwatched=True,
+                    )
+                    if has_recent_sibling:
+                        recent_matched.append(synthetic)
+                    else:
+                        old_matched.append(synthetic)
+
             # Detect series collisions: different series names -> same Sonarr path
             path_to_names: dict[str, set[str]] = defaultdict(set)
             for s in recent_matched + old_matched:

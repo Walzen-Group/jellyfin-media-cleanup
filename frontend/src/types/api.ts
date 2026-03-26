@@ -50,6 +50,7 @@ export interface SeasonInfo {
   totalEpisodes: number
   sizeBytes: number
   status: MediaStatus
+  isUnwatched: boolean            // True for synthetic seasons with no watch history
 }
 
 export interface SeriesGroup {

@@ -13,8 +13,8 @@ from media_cleanup.service import (
     CleanupResult,
     CleanupService,
     CancellationError,
-    build_summary,
 )
+from media_cleanup.models import build_summary
 from media_cleanup.matching import MatchResult
 from media_cleanup.types import SeasonSummary
 
@@ -126,34 +126,22 @@ class TestCancellation:
 # ------------------------------------------------------------------ #
 
 class TestBuildSummary:
-    def test_returns_expected_keys(self):
+    def test_returns_summary_model(self):
         result = CleanupResult()
         s = build_summary(result, mode="all")
-        expected_keys = [
-            "recent_movie_count", "old_movie_count",
-            "recent_shows_count", "recent_seasons_count",
-            "old_shows_count", "old_seasons_count",
-            "never_watched_movie_count", "never_watched_series_count",
-            "library_movie_count", "library_series_count",
-            "kept_movie_count", "kept_shows_count", "kept_seasons_count",
-            "matched_movie_count", "matched_shows_count", "matched_seasons_count",
-            "ambiguous_movie_count", "ambiguous_shows_count", "ambiguous_seasons_count",
-            "unmatched_movie_count", "unmatched_shows_count", "unmatched_seasons_count",
-            "skipped_episodes", "fallback_episodes",
-            "recent_size", "old_size", "kept_size", "lib_size",
-            "never_watched_size", "seasons_only_size", "entire_shows_size",
-            "recent_size_fmt", "old_size_fmt", "kept_size_fmt", "lib_size_fmt",
-            "never_watched_size_fmt", "seasons_only_size_fmt", "entire_shows_size_fmt",
-        ]
-        for key in expected_keys:
-            assert key in s, f"Missing key: {key}"
+        # Verify key sub-models exist
+        assert s.recent.movie_count == 0
+        assert s.old.seasons_count == 0
+        assert s.matching.matched_movie_count == 0
+        assert s.episodes.skipped == 0
+        assert s.space_savings.seasons_only_size == 0
 
     def test_empty_result_has_zero_counts(self):
         result = CleanupResult()
         s = build_summary(result)
-        assert s["recent_movie_count"] == 0
-        assert s["old_seasons_count"] == 0
-        assert s["lib_size"] == 0
+        assert s.recent.movie_count == 0
+        assert s.old.seasons_count == 0
+        assert s.library.total_size == 0
 
     def test_summary_with_movie_data(self):
         result = CleanupResult(
@@ -165,7 +153,7 @@ class TestBuildSummary:
             ],
         )
         s = build_summary(result, mode="movies")
-        assert s["recent_movie_count"] == 1
-        assert s["old_movie_count"] == 1
-        assert s["recent_size"] == 1024**3
-        assert s["old_size"] == 2 * 1024**3
+        assert s.recent.movie_count == 1
+        assert s.old.movie_count == 1
+        assert s.recent.movie_size == 1024**3
+        assert s.old.movie_size == 2 * 1024**3
