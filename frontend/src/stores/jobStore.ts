@@ -2,17 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type {
   AnalysisRequest, FullJobResponse, JobResponse, WebSocketMessage,
-  MovieRow, SeriesRow, MediaStatus,
+  MovieRow, SeriesRow, FilteredResult,
 } from '../types/api'
 import { useApi } from '../composables/useApi'
-
-/**
- * Tag movies with a status value. Used to flatten the categorized API response
- * into a single array where the status column can be filtered/sorted.
- */
-function tagMovies(movies: { title: string }[], status: MediaStatus): MovieRow[] {
-  return movies.map(m => ({ ...m, status }) as MovieRow)
-}
 
 export const useJobStore = defineStore('job', () => {
   const api = useApi()
@@ -23,29 +15,32 @@ export const useJobStore = defineStore('job', () => {
   const monthThreshold = ref(24)
   const loading = ref(true)
 
+  // Wizard state for the stepper UI
+  const wizardStep = ref(1)
+  const filteredResult = ref<FilteredResult | null>(null)
+  const filterLoading = ref(false)
+
   const isAnalyzing = computed(() => {
     const s = currentJob.value?.status
     return s === 'queued' || s === 'running'
   })
 
   /**
-   * Flatten categorized movies into a single array with status tags.
-   * Allows tables to filter/sort by a single status column instead of having
-   * separate tables per category. The backend categorizes for summaries and
-   * the YAML report; the frontend flattens for unified table display.
+   * Flatten categorized movies into a single array for unified table display.
+   * Status is set by the backend on each MovieMatch, so no re-tagging needed.
    */
   const allMovies = computed<MovieRow[]>(() => {
     const r = currentJob.value?.result
     if (!r) return []
     return [
-      ...tagMovies(r.recentlyWatched.movies, 'recent'),
-      ...tagMovies(r.notRecentlyWatched.movies, 'old'),
-      ...tagMovies(r.keep.movies, 'kept'),
-      ...tagMovies(r.collision.movies, 'collision'),
-      ...tagMovies(r.unmatched.movies, 'unmatched'),
-      ...tagMovies(r.neverWatched.movies, 'never'),
-      ...tagMovies(r.neverNew.movies, 'never_new'),
-    ]
+      ...r.recentlyWatched.movies,
+      ...r.notRecentlyWatched.movies,
+      ...r.keep.movies,
+      ...r.collision.movies,
+      ...r.unmatched.movies,
+      ...r.neverWatched.movies,
+      ...r.neverNew.movies,
+    ] as MovieRow[]
   })
 
   /**
@@ -71,6 +66,48 @@ export const useJobStore = defineStore('job', () => {
       totalEpisodes: s.seasons.reduce((sum, sn) => sum + (sn.totalEpisodes || 0), 0),
     }))
   })
+
+  /**
+   * Filtered movies from the filter endpoint. Backend returns items with status already set,
+   * so no tagMovies transformation is needed — just pass through.
+   */
+  const filteredMovies = computed<MovieRow[]>(() =>
+    (filteredResult.value?.movies ?? []) as MovieRow[]
+  )
+
+  /**
+   * Filtered series from the filter endpoint. Compute totalEpisodes the same way as allSeries.
+   */
+  const filteredSeries = computed<SeriesRow[]>(() =>
+    (filteredResult.value?.series ?? []).map(s => ({
+      ...s,
+      totalEpisodes: s.seasons.reduce((sum, sn) => sum + (sn.totalEpisodes || 0), 0),
+    }))
+  )
+
+  /**
+   * Apply category/greedy filter to the current job's analysis result.
+   * Calls the backend filter endpoint and stores the result.
+   */
+  async function applyFilter(categories: string[], greedy: boolean) {
+    if (!currentJob.value?.jobId) return
+    filterLoading.value = true
+    try {
+      filteredResult.value = await api.filterAnalysis(currentJob.value.jobId, { categories, greedy })
+    } finally {
+      filterLoading.value = false
+    }
+  }
+
+  /**
+   * Navigate the wizard stepper. Clears filtered result when going back to step 1.
+   */
+  function setWizardStep(step: number) {
+    wizardStep.value = step
+    if (step === 1) {
+      filteredResult.value = null
+    }
+  }
 
   async function restoreCurrentJob() {
     loading.value = true
@@ -230,6 +267,13 @@ export const useJobStore = defineStore('job', () => {
     monthThreshold,
     allMovies,
     allSeries,
+    wizardStep,
+    filteredResult,
+    filterLoading,
+    filteredMovies,
+    filteredSeries,
+    applyFilter,
+    setWizardStep,
     startAnalysis,
     cancelCurrentJob,
     clearResults,

@@ -31,6 +31,10 @@ cd frontend && pnpm install && pnpm dev
 
 # Run tests
 uv run pytest tests/
+
+# Run a single test file or test
+uv run pytest tests/test_matching.py
+uv run pytest tests/test_matching.py -k test_exact_match
 ```
 
 ## VS Code
@@ -51,7 +55,22 @@ Tests use **pytest** with **pytest-recording** (VCR cassettes) for caching real 
 - `tests/test_billions_mock.py` — mock version using captured data constants, no network needed.
 - `tests/test_matching.py` — unit and integration tests for the matching engine. Covers exact match, year-stripped match, watch-date disambiguation, length ratio guard, word-boundary matching, normalize_title, and end-to-end `match_seasons_to_sonarr`. No network or mocking required.
 
-Requires `secrets.yaml` in project root for integration tests (skipped if missing).
+Requires `secrets.yaml` in project root for integration tests (skipped if missing). Format:
+
+```yaml
+jellyfin:
+  root_url: "http://your-jellyfin:8096"
+  api_key: "your-jellyfin-token"
+  user_id: "your-user-id"
+sonarr:
+  root_url: "http://your-sonarr:8989"
+  api_key: "your-sonarr-key"
+  keep_tag: "keep"        # optional
+radarr:
+  root_url: "http://your-radarr:7878"
+  api_key: "your-radarr-key"
+  keep_tag: "keep"        # optional
+```
 
 ## Architecture
 

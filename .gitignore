@@ -1,4 +1,5 @@
 .cortex/
+.direnv/
 
 # Frontend
 frontend/node_modules/
