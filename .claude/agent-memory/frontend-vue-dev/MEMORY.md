@@ -1,0 +1,1 @@
+- [Use pnpm exclusively](feedback_pnpm_only.md) — Never use npm/npx for frontend commands, always pnpm

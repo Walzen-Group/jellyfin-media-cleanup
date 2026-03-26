@@ -10,9 +10,19 @@ import { formatSize, formatDate } from '../utils/format'
 
 const props = defineProps<{
   series: SeriesRow[]
+  activeCategories?: string[]
 }>()
 
 const expandedRows = ref<Record<string, boolean>>({})
+
+/**
+ * Returns opacity class for a season row based on whether its status
+ * is in the active categories. Only applies when activeCategories is provided.
+ */
+function seasonRowClass(seasonStatus: string): string {
+  if (!props.activeCategories?.length) return ''
+  return props.activeCategories.includes(seasonStatus) ? '' : 'opacity-20'
+}
 
 const statusOptions = [
   { label: 'Recently Watched', value: 'recent' },
@@ -149,6 +159,7 @@ const filteredCount = computed(() => {
               :season-number="s.seasonNumber"
               :last-played="s.lastPlayed || null"
               :status="s.status"
+              :class="seasonRowClass(s.status)"
             />
           </div>
         </template>
@@ -168,7 +179,7 @@ const filteredCount = computed(() => {
       <template #expansion="{ data }">
         <div class="pl-10 pr-4 py-2">
           <!-- Season breakdown table: watch status, available/on-disk, last played, episode counts, sizes -->
-          <DataTable :value="data.seasons" size="small" tableClass="text-xs" tableStyle="table-layout: fixed">
+          <DataTable :value="data.seasons" size="small" tableClass="text-xs" tableStyle="table-layout: fixed" :rowClass="(s: any) => seasonRowClass(s.status)">
             <Column field="seasonNumber" header="Season" sortable>
               <template #body="{ data: s }">
                 S{{ String(s.seasonNumber).padStart(2, '0') }}

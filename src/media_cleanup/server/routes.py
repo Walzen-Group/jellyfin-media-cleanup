@@ -8,8 +8,10 @@ from fastapi import APIRouter, HTTPException
 
 from media_cleanup.models import (
     AnalysisRequest,
+    FilterRequest,
     JobResponse,
     JobStatus,
+    filter_analysis_result,
 )
 from media_cleanup.server.jobs import Job, JobManager
 
@@ -80,6 +82,19 @@ def get_analysis(job_id: str) -> dict:
     if job.status == JobStatus.complete and job.result is not None:
         resp["result"] = job.result.model_dump(by_alias=True)
     return resp
+
+
+@router.post("/analysis/{job_id}/filter")
+def filter_analysis(job_id: str, request: FilterRequest) -> dict:
+    """Filter a completed analysis result by user-selected categories."""
+    job = _manager().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.result is None:
+        raise HTTPException(status_code=400, detail="Job has no result")
+
+    filtered = filter_analysis_result(job.result, request.categories, request.greedy)
+    return filtered.model_dump(by_alias=True)
 
 
 @router.delete("/analysis/{job_id}")

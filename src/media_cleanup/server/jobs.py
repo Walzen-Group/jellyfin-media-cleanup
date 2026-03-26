@@ -54,6 +54,8 @@ class JobManager:
         """Register a broadcast function (called from the WebSocket manager)."""
         self._broadcast_fn = fn
 
+    MAX_JOBS = 100
+
     def submit(self, request: AnalysisRequest) -> Job:
         """Add a job to the queue. Starts the worker thread if needed."""
         job = Job(
@@ -65,6 +67,7 @@ class JobManager:
         with self._lock:
             self._jobs[job.job_id] = job
             self._queue.append(job.job_id)
+            self._prune_old_jobs()
 
         self._broadcast({
             "type": "job_created",
@@ -261,6 +264,19 @@ class JobManager:
                 "jobId": job.job_id,
                 "error": str(exc),
             })
+
+    def _prune_old_jobs(self) -> None:
+        """Remove oldest completed jobs when exceeding MAX_JOBS. Must hold _lock."""
+        finished = {JobStatus.complete, JobStatus.failed, JobStatus.cancelled}
+        while len(self._jobs) > self.MAX_JOBS:
+            oldest = None
+            for jid, j in self._jobs.items():
+                if j.status in finished:
+                    if oldest is None or j.created_at < oldest.created_at:
+                        oldest = j
+            if oldest is None:
+                break  # only active jobs remain, can't prune
+            del self._jobs[oldest.job_id]
 
     def _broadcast(self, message: dict) -> None:
         if self._broadcast_fn:

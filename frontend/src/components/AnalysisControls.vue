@@ -133,6 +133,9 @@ async function runAnalysis() {
         text
         @click="store.clearResults()"
       />
+
+      <!-- Extra actions injected by parent (e.g. Next button) -->
+      <div class="ml-auto"><slot name="actions" /></div>
     </div>
 
     <div v-if="store.error" class="text-red-500 text-sm">

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic.alias_generators import to_camel
 
 from media_cleanup.matching import MatchResult
@@ -211,6 +211,42 @@ class AnalysisResult(_Base):
     never_watched: MediaSection
     never_new: MediaSection  # never watched but recently added
     summary: SummaryModel
+
+
+class FilterRequest(_Base):
+    """User's category selections for filtering."""
+    categories: list[str]  # subset of: "old", "never", "never_new"
+    greedy: bool = False    # True = include mixed-status series
+
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, v: list[str]) -> list[str]:
+        allowed = {"old", "never", "never_new"}
+        invalid = set(v) - allowed
+        if invalid:
+            raise ValueError(f"Invalid categories: {invalid}. Allowed: {allowed}")
+        return v
+
+
+class FilteredSummary(_Base):
+    """Summary counts for a filtered result set."""
+    movie_count: int = 0
+    series_count: int = 0
+    season_count: int = 0
+    total_size: int = 0
+    total_size_fmt: str = ""
+    total_movie_count: int = 0
+    total_series_count: int = 0
+    total_season_count: int = 0
+    total_library_size: int = 0
+    total_library_size_fmt: str = ""
+
+
+class FilteredResult(_Base):
+    """Filtered analysis result containing only user-selected categories."""
+    movies: list[MovieMatch] = []
+    series: list[SeriesGroup] = []
+    summary: FilteredSummary = FilteredSummary()
 
 
 class ProgressMessage(_Base):
@@ -421,7 +457,7 @@ def _title_from_path(path: str) -> str:
     return parts[-1] if parts else path
 
 
-def match_result_to_model(mr: MatchResult) -> MovieMatch:
+def match_result_to_model(mr: MatchResult, status: str = "") -> MovieMatch:
     title = mr.matched_title or _title_from_path(mr.jellyfin_path)
     return MovieMatch(
         title=title,
@@ -433,6 +469,7 @@ def match_result_to_model(mr: MatchResult) -> MovieMatch:
         is_ambiguous=mr.is_ambiguous,
         ambiguity_reason=mr.ambiguity_reason,
         ambiguous_candidates=mr.ambiguous_candidates,
+        status=status,
     )
 
 
@@ -593,24 +630,24 @@ def cleanup_result_to_response(
 
     return AnalysisResult(
         recently_watched=MediaSection(
-            movies=[match_result_to_model(m) for m in result.recent_movie_matches],
+            movies=[match_result_to_model(m, status="recent") for m in result.recent_movie_matches],
             series=series_by_cat.get("recent", []),
         ),
         not_recently_watched=MediaSection(
-            movies=[match_result_to_model(m) for m in result.old_movie_matches],
+            movies=[match_result_to_model(m, status="old") for m in result.old_movie_matches],
             series=series_by_cat.get("old", []),
         ),
         keep=MediaSection(
-            movies=[match_result_to_model(m) for m in result.kept_movie_matches],
+            movies=[match_result_to_model(m, status="kept") for m in result.kept_movie_matches],
             series=series_by_cat.get("kept", []),
         ),
         collision=MediaSection(
-            movies=[match_result_to_model(m) for m in result.collision_movie_matches],
+            movies=[match_result_to_model(m, status="collision") for m in result.collision_movie_matches],
             series=series_by_cat.get("collision", []),
         ),
         unmatched=MediaSection(
             movies=[
-                match_result_to_model(m)
+                match_result_to_model(m, status="unmatched")
                 for m in result.recent_movie_matches + result.old_movie_matches
                 if not m.is_matched
             ],
@@ -625,4 +662,96 @@ def cleanup_result_to_response(
             series=series_by_cat.get("never_new", []),
         ),
         summary=build_summary(result, mode, added_threshold),
+    )
+
+
+def filter_analysis_result(
+    result: AnalysisResult,
+    categories: list[str],
+    greedy: bool = False,
+) -> FilteredResult:
+    """Filter an AnalysisResult down to user-selected categories.
+
+    Args:
+        result: The full analysis result to filter.
+        categories: Category names to include ("old", "never", "never_new").
+        greedy: If True, include mixed-status series. If False, exclude them.
+
+    Returns:
+        A FilteredResult with only items from the selected categories.
+    """
+    section_map: dict[str, MediaSection] = {
+        "old": result.not_recently_watched,
+        "never": result.never_watched,
+        "never_new": result.never_new,
+    }
+
+    movies: list[MovieMatch] = []
+    series: list[SeriesGroup] = []
+
+    for cat in categories:
+        section = section_map.get(cat)
+        if section is None:
+            continue
+        movies.extend(section.movies)
+        for s in section.series:
+            if not greedy and s.status == "mixed":
+                continue
+            # Recalculate size_bytes to only sum seasons matching selected categories
+            matching_size = sum(
+                sn.size_bytes for sn in s.seasons if sn.status in categories
+            )
+            series.append(s.model_copy(update={"size_bytes": matching_size}))
+
+    total_size = (
+        sum(m.size_bytes for m in movies)
+        + sum(s.size_bytes for s in series)
+    )
+
+    # Count only seasons whose status matches the selected categories
+    matching_season_count = sum(
+        1 for s in series for sn in s.seasons if sn.status in categories
+    )
+
+    # Compute totals across ALL sections of the full result.
+    # Unmatched movies are duplicates of recent+old (see line ~643), so exclude them.
+    all_sections = [
+        result.recently_watched,
+        result.not_recently_watched,
+        result.keep,
+        result.collision,
+        result.never_watched,
+        result.never_new,
+    ]
+    unmatched_section = result.unmatched
+
+    total_movie_count = sum(len(sec.movies) for sec in all_sections)
+    total_movie_size = sum(m.size_bytes for sec in all_sections for m in sec.movies)
+
+    all_series_sections = all_sections + [unmatched_section]
+    total_series_count = sum(len(sec.series) for sec in all_series_sections)
+    total_season_count = sum(
+        len(s.seasons) for sec in all_series_sections for s in sec.series
+    )
+    total_series_size = sum(
+        s.size_bytes for sec in all_series_sections for s in sec.series
+    )
+
+    total_library_size = total_movie_size + total_series_size
+
+    return FilteredResult(
+        movies=movies,
+        series=series,
+        summary=FilteredSummary(
+            movie_count=len(movies),
+            series_count=len(series),
+            season_count=matching_season_count,
+            total_size=total_size,
+            total_size_fmt=_format_size(total_size),
+            total_movie_count=total_movie_count,
+            total_series_count=total_series_count,
+            total_season_count=total_season_count,
+            total_library_size=total_library_size,
+            total_library_size_fmt=_format_size(total_library_size),
+        ),
     )

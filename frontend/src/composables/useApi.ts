@@ -1,4 +1,4 @@
-import type { AnalysisRequest, FullJobResponse, JobResponse } from '../types/api'
+import type { AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse } from '../types/api'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
@@ -73,5 +73,16 @@ export function useApi() {
     await request('/api/analysis', { method: 'DELETE' })
   }
 
-  return { postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults }
+  /**
+   * Filter a completed analysis by categories and greedy mode.
+   * Returns a flat list of movies/series that match the selected categories.
+   */
+  async function filterAnalysis(jobId: string, req: FilterRequest): Promise<FilteredResult> {
+    return request(`/api/analysis/${jobId}/filter`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    })
+  }
+
+  return { postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults, filterAnalysis }
 }

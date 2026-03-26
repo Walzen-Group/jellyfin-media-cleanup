@@ -171,6 +171,30 @@ export interface SeriesRow extends SeriesGroup {
   totalEpisodes: number
 }
 
+export interface FilterRequest {
+  categories: string[]  // "old" | "never" | "never_new"
+  greedy: boolean
+}
+
+export interface FilteredSummary {
+  movieCount: number
+  seriesCount: number
+  seasonCount: number
+  totalSize: number
+  totalSizeFmt: string
+  totalMovieCount: number
+  totalSeriesCount: number
+  totalSeasonCount: number
+  totalLibrarySize: number
+  totalLibrarySizeFmt: string
+}
+
+export interface FilteredResult {
+  movies: MovieMatch[]
+  series: SeriesGroup[]
+  summary: FilteredSummary
+}
+
 export type WebSocketMessage =
   | { type: 'job_created'; job: JobResponse }
   | { type: 'job_progress'; jobId: string; step: string; percent: number; stepIndex: number; totalSteps: number }
