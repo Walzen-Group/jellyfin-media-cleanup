@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 from media_cleanup.types import MediaStatus, MatchMethod, MediaMode, FilterCategory
@@ -224,6 +224,8 @@ class FilterRequest(_Base):
     categories: list[FilterCategory]
     greedy: bool = False
     media_type: MediaMode = "all"
+    min_size_bytes: int = 0
+    max_size_bytes: int | None = None  # None = no upper limit
 
 
 class FilteredSummary(_Base):
@@ -746,6 +748,8 @@ def filter_analysis_result(
     categories: list[str],
     greedy: bool = False,
     media_type: str = "all",
+    min_size_bytes: int = 0,
+    max_size_bytes: int | None = None,
 ) -> FilteredResult:
     """Filter an AnalysisResult down to user-selected categories.
 
@@ -753,6 +757,8 @@ def filter_analysis_result(
         result: The full analysis result to filter.
         categories: Category names to include ("old", "never", "never_new").
         greedy: If True, include mixed-status series. If False, exclude them.
+        min_size_bytes: Exclude items smaller than this threshold (inclusive lower bound).
+        max_size_bytes: Exclude items larger than this threshold, or None for no upper limit.
 
     Returns:
         A FilteredResult with only items from the selected categories.
@@ -798,6 +804,17 @@ def filter_analysis_result(
         series = []
     elif media_type == "series":
         movies = []
+
+    # Apply size range filter
+    def _in_range(size: int) -> bool:
+        if size < min_size_bytes:
+            return False
+        if max_size_bytes is not None and size > max_size_bytes:
+            return False
+        return True
+
+    movies = [m for m in movies if _in_range(m.size_bytes)]
+    series = [s for s in series if _in_range(s.size_bytes)]
 
     total_size = (
         sum(m.size_bytes for m in movies)

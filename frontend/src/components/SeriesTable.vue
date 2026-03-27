@@ -16,7 +16,16 @@ const props = defineProps<{
 const expandedRows = ref<Record<string, boolean>>({})
 
 /**
- * Returns opacity class for a season row based on whether its status
+ * Returns true when a season should be visually dimmed (status not in active categories).
+ * Only applies when activeCategories is provided.
+ */
+function isSeasonInactive(seasonStatus: string): boolean {
+  if (!props.activeCategories?.length) return false
+  return !props.activeCategories.includes(seasonStatus)
+}
+
+/**
+ * Returns opacity class for expanded season table rows based on whether their status
  * is in the active categories. Only applies when activeCategories is provided.
  */
 function seasonRowClass(seasonStatus: string): string {
@@ -159,7 +168,7 @@ const filteredCount = computed(() => {
               :season-number="s.seasonNumber"
               :last-played="s.lastPlayed || null"
               :status="s.status"
-              :class="seasonRowClass(s.status)"
+              :inactive="isSeasonInactive(s.status)"
             />
           </div>
         </template>

@@ -23,6 +23,8 @@ export const useJobStore = defineStore('job', () => {
   const prepareLoading = ref(false)
   const lastFilterCategories = ref<string[]>([])
   const lastFilterGreedy = ref(false)
+  const lastFilterMinSizeBytes = ref<number>(0)
+  const lastFilterMaxSizeBytes = ref<number | null>(null)
   const mediaType = ref<'all' | 'movies' | 'series'>('all')
 
   const isAnalyzing = computed(() => {
@@ -98,13 +100,15 @@ export const useJobStore = defineStore('job', () => {
    * Apply category/greedy filter to the current job's analysis result.
    * Calls the backend filter endpoint and stores the result.
    */
-  async function applyFilter(categories: string[], greedy: boolean) {
+  async function applyFilter(categories: string[], greedy: boolean, minSizeBytes: number = 0, maxSizeBytes: number | null = null) {
     if (!currentJob.value?.jobId) return
     filterLoading.value = true
     try {
-      filteredResult.value = await api.filterAnalysis(currentJob.value.jobId, { categories, greedy, mediaType: mediaType.value })
+      filteredResult.value = await api.filterAnalysis(currentJob.value.jobId, { categories, greedy, mediaType: mediaType.value, minSizeBytes, maxSizeBytes })
       lastFilterCategories.value = [...categories]
       lastFilterGreedy.value = greedy
+      lastFilterMinSizeBytes.value = minSizeBytes
+      lastFilterMaxSizeBytes.value = maxSizeBytes
     } finally {
       filterLoading.value = false
     }
@@ -118,7 +122,13 @@ export const useJobStore = defineStore('job', () => {
     if (!currentJob.value?.jobId) return
     prepareLoading.value = true
     try {
-      runPlan.value = await api.prepareRunPlan(currentJob.value.jobId, { categories, greedy, mediaType: mediaType.value })
+      runPlan.value = await api.prepareRunPlan(currentJob.value.jobId, {
+        categories,
+        greedy,
+        mediaType: mediaType.value,
+        minSizeBytes: lastFilterMinSizeBytes.value,
+        maxSizeBytes: lastFilterMaxSizeBytes.value,
+      })
     } finally {
       prepareLoading.value = false
     }
@@ -304,6 +314,8 @@ export const useJobStore = defineStore('job', () => {
     prepareLoading,
     lastFilterCategories,
     lastFilterGreedy,
+    lastFilterMinSizeBytes,
+    lastFilterMaxSizeBytes,
     mediaType,
     applyFilter,
     prepareRunPlan: prepareRunPlanAction,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Step 3 of the wizard: dry-run deletion preview.
+ * Step 3 of the wizard: deletion preview.
  * Shows exactly which Radarr movies and Sonarr series/seasons would be affected.
  * Calls store.prepareRunPlan() which hits the backend prepare endpoint.
  * Users can search across all tables and deselect individual items via checkboxes.
@@ -117,6 +117,34 @@ function formatSize(bytes: number): string {
   return `${value.toFixed(i > 0 ? 1 : 0)} ${units[i]}`
 }
 
+/** Collapsed state for each toggleable Panel */
+const fullSeriesCollapsed = ref(false)
+const seasonCleanupsCollapsed = ref(false)
+const moviesCollapsed = ref(false)
+
+/**
+ * Per-panel PassThrough objects defined in script setup (not in template) so
+ * that the ref objects are accessed as Ref<boolean> with .value — in the template
+ * Vue auto-unwraps refs to plain booleans, making .value inaccessible.
+ *
+ * Header onClick toggles collapsed state. stopPropagation on the toggle button
+ * prevents the click from bubbling up to the header handler after PrimeVue's
+ * own toggle has already fired, avoiding a double-toggle.
+ */
+const _toggleButtonPt = { onClick: (e: Event) => e.stopPropagation() }
+const fullSeriesPt = {
+  header: { onClick: () => { fullSeriesCollapsed.value = !fullSeriesCollapsed.value }, class: 'cursor-pointer select-none' },
+  togglebutton: _toggleButtonPt,
+}
+const seasonCleanupsPt = {
+  header: { onClick: () => { seasonCleanupsCollapsed.value = !seasonCleanupsCollapsed.value }, class: 'cursor-pointer select-none' },
+  togglebutton: _toggleButtonPt,
+}
+const moviesPt = {
+  header: { onClick: () => { moviesCollapsed.value = !moviesCollapsed.value }, class: 'cursor-pointer select-none' },
+  togglebutton: _toggleButtonPt,
+}
+
 /** Auto-trigger prepare when entering this step (no manual button needed) */
 onMounted(async () => {
   if (!store.runPlan && canPrepare.value) {
@@ -153,7 +181,7 @@ onMounted(async () => {
         <span>{{ mediaTypeLabels[store.mediaType] || store.mediaType }}</span>
         <span v-if="store.lastFilterGreedy">
           <span class="text-surface-300 dark:text-surface-600">|</span>
-          Greedy
+          <span class="ml-5">Greedy</span>
         </span>
       </div>
 
@@ -207,7 +235,9 @@ onMounted(async () => {
       <!-- Series to delete entirely (Sonarr) -->
       <Panel
         v-if="visibleFullSeries.length > 0"
+        v-model:collapsed="fullSeriesCollapsed"
         toggleable
+        :pt="fullSeriesPt"
         class="max-w-full overflow-x-auto"
       >
         <template #header>
@@ -243,7 +273,9 @@ onMounted(async () => {
       <!-- Seasons to clean (Sonarr) -->
       <Panel
         v-if="visibleSeasonCleanups.length > 0"
+        v-model:collapsed="seasonCleanupsCollapsed"
         toggleable
+        :pt="seasonCleanupsPt"
         class="max-w-full overflow-x-auto"
       >
         <template #header>
@@ -300,7 +332,9 @@ onMounted(async () => {
       <!-- Movies to delete (Radarr) -->
       <Panel
         v-if="visibleMovies.length > 0"
+        v-model:collapsed="moviesCollapsed"
         toggleable
+        :pt="moviesPt"
         class="max-w-full overflow-x-auto"
       >
         <template #header>

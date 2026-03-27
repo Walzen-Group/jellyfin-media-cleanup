@@ -12,6 +12,7 @@ import Checkbox from 'primevue/checkbox'
 import ToggleSwitch from 'primevue/toggleswitch'
 import RadioButton from 'primevue/radiobutton'
 import Button from 'primevue/button'
+import Slider from 'primevue/slider'
 import Tabs from 'primevue/tabs'
 import TabList from 'primevue/tablist'
 import Tab from 'primevue/tab'
@@ -20,21 +21,38 @@ import TabPanel from 'primevue/tabpanel'
 import MovieTable from './MovieTable.vue'
 import SeriesTable from './SeriesTable.vue'
 import FilteredSummaryBar from './FilteredSummaryBar.vue'
+import { formatSize } from '../utils/format'
 
 const store = useJobStore()
 const { mediaType } = storeToRefs(store)
 
+const MAX_SIZE_SLIDER = 200  // represents 200 GB; treated as "no limit"
+
 const categories = ref<string[]>([])
 const greedy = ref(false)
+const sizeRange = ref<[number, number]>([0, MAX_SIZE_SLIDER])
 const appliedCategories = ref<string[]>([])
 const appliedGreedy = ref(false)
 const appliedMediaType = ref<string>('all')
+const appliedSizeRange = ref<[number, number]>([0, MAX_SIZE_SLIDER])
+
+/** Convert a slider GB value to bytes for display (e.g. formatSize(sliderGbToBytes(5)) => "5.0 GB") */
+function sliderGbToBytes(gb: number): number {
+  return gb * 1024 * 1024 * 1024
+}
+
+/** Human-readable label for a slider position. Returns "no limit" when at MAX_SIZE_SLIDER. */
+function formatSliderValue(gb: number): string {
+  if (gb >= MAX_SIZE_SLIDER) return 'no limit'
+  return formatSize(sliderGbToBytes(gb))
+}
 
 /** True when the current settings differ from what was last filtered */
 const filterStale = computed(() => {
   if (!store.filteredResult) return true
   const catsChanged = JSON.stringify([...categories.value].sort()) !== JSON.stringify([...appliedCategories.value].sort())
-  return catsChanged || greedy.value !== appliedGreedy.value || mediaType.value !== appliedMediaType.value
+  const sizeChanged = sizeRange.value[0] !== appliedSizeRange.value[0] || sizeRange.value[1] !== appliedSizeRange.value[1]
+  return catsChanged || greedy.value !== appliedGreedy.value || mediaType.value !== appliedMediaType.value || sizeChanged
 })
 
 const mediaTypeOptions = [
@@ -50,10 +68,13 @@ const categoryOptions = [
 ]
 
 async function filter() {
-  await store.applyFilter(categories.value, greedy.value)
+  const minSizeBytes = sizeRange.value[0] > 0 ? sliderGbToBytes(sizeRange.value[0]) : 0
+  const maxSizeBytes = sizeRange.value[1] >= MAX_SIZE_SLIDER ? null : sliderGbToBytes(sizeRange.value[1])
+  await store.applyFilter(categories.value, greedy.value, minSizeBytes, maxSizeBytes)
   appliedCategories.value = [...categories.value]
   appliedGreedy.value = greedy.value
   appliedMediaType.value = mediaType.value
+  appliedSizeRange.value = [...sizeRange.value] as [number, number]
 }
 
 const nextLoading = ref(false)
@@ -71,10 +92,12 @@ async function proceedToPrepare() {
 <template>
   <div class="space-y-6">
     <div class="card p-3 sm:p-5 space-y-5">
-      <!-- Category selection, media type, and greedy mode -->
-      <div class="flex flex-col sm:flex-row gap-6">
-        <div class="space-y-5">
-          <div>
+      <!-- Category selection, media type, size range, and greedy mode -->
+      <div class="space-y-5">
+        <!-- Row 1: categories + media type + size range side by side on sm+, stacked on mobile -->
+        <div class="flex flex-col sm:flex-row gap-6 sm:gap-10">
+          <!-- Categories to prune -->
+          <div class="flex-1">
             <label class="block text-xs font-medium text-surface-500 mb-3 uppercase tracking-wide">
               Categories to prune
             </label>
@@ -95,35 +118,52 @@ async function proceedToPrepare() {
             </div>
           </div>
 
-          <div>
-            <div class="flex items-center gap-3">
-              <ToggleSwitch v-model="greedy" inputId="greedy-toggle" />
-              <label for="greedy-toggle" class="cursor-pointer font-medium">Greedy mode</label>
+          <!-- Media type -->
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-surface-500 mb-3 uppercase tracking-wide">
+              Media type
+            </label>
+            <div class="flex flex-col gap-3">
+              <div
+                v-for="opt in mediaTypeOptions"
+                :key="opt.value"
+                class="flex items-center gap-2"
+              >
+                <RadioButton
+                  v-model="mediaType"
+                  :inputId="'media-' + opt.value"
+                  :value="opt.value"
+                />
+                <label :for="'media-' + opt.value" class="cursor-pointer">{{ opt.label }}</label>
+              </div>
             </div>
-            <p class="text-xs text-surface-400 mt-1.5" style="padding-left: 3.25rem;">
-              Include series where only some seasons match (mixed status). When off, only series where all seasons match are included.
+          </div>
+
+          <!-- File size range -->
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-surface-500 mb-3 uppercase tracking-wide">
+              File size range
+            </label>
+            <div class="px-1">
+              <Slider v-model="sizeRange" :min="0" :max="MAX_SIZE_SLIDER" :step="1" range class="w-full" />
+            </div>
+            <p class="text-sm text-surface-400 mt-2">
+              <span class="text-surface-600 dark:text-surface-300 font-medium">{{ formatSliderValue(sizeRange[0]) }}</span>
+              <span class="mx-1.5">–</span>
+              <span class="text-surface-600 dark:text-surface-300 font-medium">{{ formatSliderValue(sizeRange[1]) }}</span>
             </p>
           </div>
         </div>
 
-        <div class="sm:ml-8">
-          <label class="block text-xs font-medium text-surface-500 mb-3 uppercase tracking-wide">
-            Media type
-          </label>
-          <div class="flex flex-col gap-3">
-            <div
-              v-for="opt in mediaTypeOptions"
-              :key="opt.value"
-              class="flex items-center gap-2"
-            >
-              <RadioButton
-                v-model="mediaType"
-                :inputId="'media-' + opt.value"
-                :value="opt.value"
-              />
-              <label :for="'media-' + opt.value" class="cursor-pointer">{{ opt.label }}</label>
-            </div>
+        <!-- Row 2: greedy mode always below the three controls above -->
+        <div>
+          <div class="flex items-center gap-3">
+            <ToggleSwitch v-model="greedy" inputId="greedy-toggle" />
+            <label for="greedy-toggle" class="cursor-pointer font-medium">Greedy mode</label>
           </div>
+          <p class="text-xs text-surface-400 mt-1.5" style="padding-left: 3.25rem;">
+            Include series where only some seasons match (mixed status). When off, only series where all seasons match are included.
+          </p>
         </div>
       </div>
 
@@ -157,7 +197,7 @@ async function proceedToPrepare() {
           @click="proceedToPrepare"
         />
         <span v-if="filterStale" class="text-xs text-yellow-500">Settings changed. Re-run filter first.</span>
-        <span v-else class="text-xs text-surface-400">Proceed to prepare a dry-run deletion plan</span>
+        <span v-else class="text-xs text-surface-400">Proceed to prepare a deletion plan</span>
       </div>
     </div>
 

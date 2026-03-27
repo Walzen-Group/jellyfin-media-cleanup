@@ -179,6 +179,8 @@ export interface FilterRequest {
   categories: string[]  // "old" | "never" | "never_new"
   greedy: boolean
   mediaType?: 'all' | 'movies' | 'series'  // default: "all"
+  minSizeBytes?: number
+  maxSizeBytes?: number | null
 }
 
 export interface FilteredSummary {

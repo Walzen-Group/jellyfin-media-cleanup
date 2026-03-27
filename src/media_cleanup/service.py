@@ -323,6 +323,11 @@ class CleanupService:
                     path_to_names[s.matched_sonarr_path].add(s.series_name)
             collision_series_paths = {p for p, names in path_to_names.items() if len(names) > 1}
 
+            # Drop matched seasons with no files on disk — Sonarr reports size_on_disk=0
+            # when a season has been deleted or was never downloaded. Nothing to clean up.
+            recent_matched = [s for s in recent_matched if s.size_on_disk > 0]
+            old_matched = [s for s in old_matched if s.size_on_disk > 0]
+
             # Keep tags take priority over collisions
             result.kept_season_matches = [
                 s for s in recent_matched + old_matched

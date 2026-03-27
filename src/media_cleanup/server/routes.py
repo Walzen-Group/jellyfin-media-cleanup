@@ -95,7 +95,7 @@ def filter_analysis(job_id: str, request: FilterRequest) -> dict:
     if job.result is None:
         raise HTTPException(status_code=400, detail="Job has no result")
 
-    filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type)
+    filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type, request.min_size_bytes, request.max_size_bytes)
     return filtered.model_dump(by_alias=True)
 
 
@@ -108,7 +108,7 @@ def prepare_run_plan(job_id: str, request: FilterRequest) -> RunPlan:
     if job.result is None:
         raise HTTPException(status_code=400, detail="Job has no result")
 
-    filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type)
+    filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type, request.min_size_bytes, request.max_size_bytes)
     return build_run_plan(filtered, categories=request.categories)
 
 

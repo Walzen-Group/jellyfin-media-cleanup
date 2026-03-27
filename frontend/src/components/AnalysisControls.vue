@@ -116,7 +116,7 @@ async function runAnalysis() {
 
       <!-- State machine: not running -> show Run (disabled if WS not connected). Submitting -> show spinner. Running -> show Cancel. -->
       <Button
-        v-if="!store.isAnalyzing && !submitting"
+        v-if="!store.isAnalyzing && !submitting && !store.currentJob?.result"
         label="Run Analysis"
         icon="pi pi-play"
         :disabled="!wsConnected"
@@ -130,7 +130,7 @@ async function runAnalysis() {
         disabled
       />
       <Button
-        v-else
+        v-else-if="store.isAnalyzing"
         :label="cancelling ? 'Cancelling...' : 'Cancel'"
         :icon="cancelling ? 'pi pi-spin pi-spinner' : 'pi pi-times'"
         severity="danger"

@@ -11,6 +11,7 @@ defineProps<{
   seasonNumber: number
   lastPlayed: string | null    // ISO date string or null for never-watched
   status: MediaStatus           // Watch status: recent, old, kept, etc.
+  inactive?: boolean            // When true, dims the dot without affecting the tooltip
 }>()
 
 /**
@@ -30,8 +31,13 @@ const colorMap: Record<string, string> = {
 </script>
 
 <template>
-  <!-- Colored dot with tooltip. Flexes to fill available width in the season row. -->
-  <span class="season-dot relative block h-5 min-w-0.5 rounded-sm cursor-default flex-1" :class="colorMap[status] ?? colorMap.unmatched">
+  <!-- Wrapper: positions the tooltip. No opacity applied here so the tooltip is never dimmed. -->
+  <span class="season-dot relative block h-5 min-w-0.5 rounded-sm cursor-default flex-1">
+    <!-- Inner color element: opacity is applied here so it doesn't affect the tooltip child -->
+    <span
+      class="absolute inset-0 rounded-sm"
+      :class="[colorMap[status] ?? colorMap.unmatched, inactive ? 'opacity-20' : '']"
+    />
     <!-- Tooltip: shows season number and last-played date (or "no data" if never watched) -->
     <span class="tooltip">S{{ String(seasonNumber).padStart(2, '0') }} · {{ lastPlayed ? lastPlayed.split(' ')[0] : 'no data' }}</span>
   </span>
