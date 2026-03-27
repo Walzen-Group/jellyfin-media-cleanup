@@ -28,6 +28,7 @@ const vibes = [
   'seesawing...',
   'humpteedumpting...',
   'flubbergusting...',
+  'boondoggling...'
 ]
 
 // Shuffle the array each time the component mounts (each analysis run)

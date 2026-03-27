@@ -1,17 +1,11 @@
 import { defineConfig } from 'vite'
-import { execSync } from 'child_process'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 
 // Inject git commit hash as a build-time constant (__GIT_HASH__).
-// In Docker, passed via VITE_GIT_HASH env var (since .git is excluded).
-// Locally, read from git directly. Falls back to 'unknown'.
-let gitHash = process.env.VITE_GIT_HASH || 'unknown'
-if (gitHash === 'unknown') {
-  try {
-    gitHash = execSync('git rev-parse --short HEAD').toString().trim()
-  } catch { /* no .git directory */ }
-}
+// In Docker/CI, passed via VITE_GIT_HASH env var (since .git is excluded).
+// Locally, just show "dev".
+const gitHash = process.env.VITE_GIT_HASH || 'dev'
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
