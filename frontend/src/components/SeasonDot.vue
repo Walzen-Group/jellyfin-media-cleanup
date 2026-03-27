@@ -22,6 +22,7 @@ const colorMap: Record<string, string> = {
   recent: 'bg-emerald-400/70 dark:bg-emerald-400/60',
   old: 'bg-rose-400/70 dark:bg-rose-400/60',
   kept: 'bg-amber-400/70 dark:bg-amber-400/60',
+  auto_keep: 'bg-yellow-400/70 dark:bg-yellow-400/60',
   mixed: 'bg-blue-400/70 dark:bg-blue-400/60',
   unmatched: 'bg-surface-300 dark:bg-surface-600',
   never: 'bg-purple-400/70 dark:bg-purple-400/60',

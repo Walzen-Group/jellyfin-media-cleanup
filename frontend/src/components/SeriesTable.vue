@@ -38,6 +38,7 @@ const statusOptions = [
   { label: 'Not Recently Watched', value: 'old' },
   { label: 'Some Recently Watched', value: 'mixed' },
   { label: 'Kept', value: 'kept' },
+  { label: 'Auto-Kept', value: 'auto_keep' },
   { label: 'Unmatched', value: 'unmatched' },
   { label: 'Never Watched', value: 'never' },
   { label: 'New (unwatched)', value: 'never_new' },
@@ -49,6 +50,7 @@ const statusLabels: Record<MediaStatus, string> = {
   old: 'Not Recent',
   mixed: 'Some',
   kept: 'Kept',
+  auto_keep: 'Auto-Kept',
   unmatched: 'Unmatched',
   never: 'Never',
   never_new: 'New',
@@ -60,6 +62,7 @@ const statusColors: Record<MediaStatus, string> = {
   old: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
   mixed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   kept: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  auto_keep: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
   unmatched: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
   never: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   never_new: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
@@ -199,7 +202,7 @@ const filteredCount = computed(() => {
               <template #body="{ data: s }">
                 <span
                   class="inline-block w-2.5 h-2.5 rounded-full"
-                  :class="s.status === 'recent' ? 'bg-emerald-400/70 dark:bg-emerald-400/60' : s.status === 'old' ? 'bg-rose-400/70 dark:bg-rose-400/60' : s.status === 'kept' ? 'bg-amber-400/70 dark:bg-amber-400/60' : s.status === 'collision' ? 'bg-orange-400/70 dark:bg-orange-400/60' : 'bg-surface-300 dark:bg-surface-600'"
+                  :class="s.status === 'recent' ? 'bg-emerald-400/70 dark:bg-emerald-400/60' : s.status === 'old' ? 'bg-rose-400/70 dark:bg-rose-400/60' : s.status === 'kept' ? 'bg-amber-400/70 dark:bg-amber-400/60' : s.status === 'auto_keep' ? 'bg-yellow-400/70 dark:bg-yellow-400/60' : s.status === 'collision' ? 'bg-orange-400/70 dark:bg-orange-400/60' : 'bg-surface-300 dark:bg-surface-600'"
                 />
               </template>
             </Column>

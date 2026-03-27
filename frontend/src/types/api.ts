@@ -159,7 +159,6 @@ export interface AnalysisResult {
   unmatched: MediaSection         // No matching library entry found (ambiguous)
   neverWatched: MediaSection      // Never watched (old; cleanup candidate)
   neverNew: MediaSection          // Never watched (recently added; keep)
-  autoKeep: MediaSection          // Re-requested after prior deletion; auto-tagged as Keep
   summary: Summary                // Aggregated statistics
 }
 
@@ -167,7 +166,7 @@ export interface FullJobResponse extends JobResponse {
   result?: AnalysisResult
 }
 
-export type MediaStatus = 'recent' | 'old' | 'kept' | 'unmatched' | 'mixed' | 'never' | 'never_new' | 'collision'
+export type MediaStatus = 'recent' | 'old' | 'kept' | 'auto_keep' | 'unmatched' | 'mixed' | 'never' | 'never_new' | 'collision'
 
 export interface MovieRow extends MovieMatch {
   status: MediaStatus

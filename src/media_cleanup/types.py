@@ -16,6 +16,7 @@ class MediaStatus(StrEnum):
     RECENT = "recent"
     OLD = "old"
     KEPT = "kept"
+    AUTO_KEEP = "auto_keep"
     UNMATCHED = "unmatched"
     NEVER = "never"
     NEVER_NEW = "never_new"

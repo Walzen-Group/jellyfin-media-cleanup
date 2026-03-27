@@ -87,7 +87,7 @@ def apply_auto_keep(
             root_url=config.radarr_url,
             api_key=config.radarr_api_key,
         )
-        radarr_tag_id = radarr.get_keep_tag_id()
+        radarr_tag_id = radarr.get_or_create_tag("auto-keep")
 
         for m in auto_keep_movies:
             if cancel_check is not None and cancel_check():
@@ -114,7 +114,7 @@ def apply_auto_keep(
             root_url=config.sonarr_url,
             api_key=config.sonarr_api_key,
         )
-        sonarr_tag_id = sonarr.get_keep_tag_id()
+        sonarr_tag_id = sonarr.get_or_create_tag("auto-keep")
 
         for path, representative in unique_sonarr_paths.items():
             if cancel_check is not None and cancel_check():

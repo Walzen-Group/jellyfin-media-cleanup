@@ -35,9 +35,11 @@ const store = useJobStore()
 const { isCleanupRunning, currentJob } = storeToRefs(store)
 
 const autoKeepCount = computed(() => {
-  const ak = currentJob.value?.result?.autoKeep
-  if (!ak) return 0
-  return (ak.movies?.length ?? 0) + (ak.series?.length ?? 0)
+  const keep = currentJob.value?.result?.keep
+  if (!keep) return 0
+  const movies = keep.movies?.filter(m => m.status === 'auto_keep').length ?? 0
+  const series = keep.series?.filter(s => s.status === 'auto_keep').length ?? 0
+  return movies + series
 })
 </script>
 

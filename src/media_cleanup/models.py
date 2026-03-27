@@ -224,7 +224,6 @@ class AnalysisResult(_Base):
     unmatched: MediaSection
     never_watched: MediaSection
     never_new: MediaSection  # never watched but recently added
-    auto_keep: MediaSection = MediaSection()  # items re-tagged as keep from deletion history
     summary: SummaryModel
 
 
@@ -468,7 +467,7 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
     for s in result.old_seasons_matched:
         if s.matched_sonarr_path:
             old_paths.add(s.matched_sonarr_path)
-    for s in result.kept_season_matches:
+    for s in result.kept_season_matches + result.auto_kept_seasons:
         if s.matched_sonarr_path:
             kept_paths.add(s.matched_sonarr_path)
 
@@ -536,12 +535,12 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
             series_size_greedy=sum(s.statistics.size_on_disk for s in result.all_series),
         ),
         kept=_make_category(
-            movie_count=len(result.kept_movie_matches),
-            shows_count=_unique_shows(result.kept_season_matches),
-            seasons_count=len(result.kept_season_matches),
-            movie_size=_movie_size(result.kept_movie_matches),
+            movie_count=len(result.kept_movie_matches) + len(result.auto_kept_movies),
+            shows_count=_unique_shows(result.kept_season_matches + result.auto_kept_seasons),
+            seasons_count=len(result.kept_season_matches) + len(result.auto_kept_seasons),
+            movie_size=_movie_size(result.kept_movie_matches + result.auto_kept_movies),
             series_size=_full_series_size(cons_kept),
-            series_size_greedy=_season_size(result.kept_season_matches),
+            series_size_greedy=_season_size(result.kept_season_matches + result.auto_kept_seasons),
         ),
         matching=MatchingStats(
             matched_movie_count=sum(1 for m in all_movie_matches if m.is_matched),
@@ -802,7 +801,7 @@ def cleanup_result_to_response(
                 library_path=first.matched_sonarr_path,
                 match_method=first.match_method,
                 fuzzy_score=first.fuzzy_score,
-                status=MediaStatus.KEPT,
+                status=MediaStatus.AUTO_KEEP,
                 size_bytes=sum(s.size_on_disk for s in sorted_seasons),
                 sonarr_series_id=first.sonarr_series_id,
                 seasons=[
@@ -812,7 +811,7 @@ def cleanup_result_to_response(
                         episode_count=s.episode_count,
                         total_episodes=sonarr_seasons.get(s.season_number, 0),
                         size_bytes=s.size_on_disk,
-                        status=MediaStatus.KEPT,
+                        status=MediaStatus.AUTO_KEEP,
                         is_unwatched=s.is_unwatched,
                     )
                     for s in sorted_seasons
@@ -837,8 +836,8 @@ def cleanup_result_to_response(
             series=series_by_cat.get("old", []),
         ),
         keep=MediaSection(
-            movies=[match_result_to_model(m, status=MediaStatus.KEPT) for m in result.kept_movie_matches],
-            series=series_by_cat.get("kept", []),
+            movies=[match_result_to_model(m, status=MediaStatus.KEPT) for m in result.kept_movie_matches] + [match_result_to_model(m, status=MediaStatus.AUTO_KEEP) for m in result.auto_kept_movies],
+            series=series_by_cat.get("kept", []) + auto_keep_series,
         ),
         collision=MediaSection(
             movies=[match_result_to_model(m, status=MediaStatus.COLLISION) for m in result.collision_movie_matches],
@@ -859,10 +858,6 @@ def cleanup_result_to_response(
         never_new=MediaSection(
             movies=never_new_movies,
             series=series_by_cat.get("never_new", []),
-        ),
-        auto_keep=MediaSection(
-            movies=[match_result_to_model(m, status=MediaStatus.KEPT) for m in result.auto_kept_movies],
-            series=auto_keep_series,
         ),
         summary=build_summary(result, mode, added_threshold),
     )

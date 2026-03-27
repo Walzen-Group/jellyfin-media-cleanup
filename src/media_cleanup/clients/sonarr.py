@@ -119,6 +119,27 @@ class SonarrClient:
                 return tag.id
         return None
 
+    def get_or_create_tag(self, label: str) -> int:
+        """Find the numeric ID of a tag by label, creating it if it doesn't exist."""
+        tags = self.get_tags()
+        for tag in tags:
+            if tag.label.lower() == label.lower():
+                return tag.id
+
+        # Create it
+        res = requests.post(
+            f'{self.root_url}/api/v3/tag',
+            json={"label": label.lower()},
+            headers=self._header
+        )
+        res.raise_for_status()
+        new_tag = res.json()
+
+        # Invalidate cache so next get_tags() call includes it
+        self._tags = None
+
+        return new_tag["id"]
+
     def filter_kept_series(self, series_list: list[Series]) -> list[Series]:
         """
         Remove series that have the "keep" tag applied.
