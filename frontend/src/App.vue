@@ -33,6 +33,9 @@ async function handleTokenLogin() {
   }
 }
 
+// Silent-renew runs in a hidden iframe -- skip all app setup
+const isSilentRenew = window.location.pathname === '/silent-renew'
+
 useThemeStore()
 const store = useJobStore()
 const { isCleanupRunning } = storeToRefs(store)
@@ -44,15 +47,17 @@ const activeView = ref<'wizard' | 'history'>('wizard')
 const isConnected = ref(false)
 provide('wsConnected', isConnected)
 
-watch(isAuthenticated, (authed) => {
-  if (authed) {
-    const ws = useWebSocket()
-    isConnected.value = ws.isConnected.value
-    watch(ws.isConnected, (v) => { isConnected.value = v })
-    ws.onMessage((msg) => store.handleWebSocketMessage(msg))
-    store.restoreCurrentJob()
-  }
-}, { immediate: true })
+if (!isSilentRenew) {
+  watch(isAuthenticated, (authed) => {
+    if (authed) {
+      const ws = useWebSocket()
+      isConnected.value = ws.isConnected.value
+      watch(ws.isConnected, (v) => { isConnected.value = v })
+      ws.onMessage((msg) => store.handleWebSocketMessage(msg))
+      store.restoreCurrentJob()
+    }
+  }, { immediate: true })
+}
 
 onMounted(() => {
   init()
