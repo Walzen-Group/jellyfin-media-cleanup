@@ -39,7 +39,8 @@ export function useWebSocket() {
     }
     attemptCount++
     const url = getWsUrl()
-    console.info(`[WS] Connecting to ${url} (attempt ${attemptCount})...`)
+    const logUrl = url.replace(/\?token=.*$/, '?token=***')
+    console.info(`[WS] Connecting to ${logUrl} (attempt ${attemptCount})...`)
 
     try {
       ws = new WebSocket(url)
@@ -51,7 +52,7 @@ export function useWebSocket() {
 
     ws.onopen = () => {
       if (connectTimeoutTimer) { clearTimeout(connectTimeoutTimer); connectTimeoutTimer = null }
-      console.info(`[WS] Connected to ${url}`)
+      console.info(`[WS] Connected to ${logUrl}`)
       isConnected.value = true
       reconnectDelay = 2000  // Reset for future reconnections
     }
