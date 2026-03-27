@@ -127,22 +127,32 @@ const moviesCollapsed = ref(false)
  * that the ref objects are accessed as Ref<boolean> with .value — in the template
  * Vue auto-unwraps refs to plain booleans, making .value inaccessible.
  *
- * Header onClick toggles collapsed state. stopPropagation on the toggle button
- * prevents the click from bubbling up to the header handler after PrimeVue's
- * own toggle has already fired, avoiding a double-toggle.
+ * PrimeVue's built-in toggle button is hidden via the scoped :deep(.p-panel-toggle-button)
+ * CSS rule below. The header onClick drives collapse state instead, with a custom
+ * chevron icon rendered in the #header slot.
  */
-const _toggleButtonPt = { onClick: (e: Event) => e.stopPropagation() }
 const fullSeriesPt = {
-  header: { onClick: () => { fullSeriesCollapsed.value = !fullSeriesCollapsed.value }, class: 'cursor-pointer select-none' },
-  togglebutton: _toggleButtonPt,
+  header: {
+    onClick: () => { fullSeriesCollapsed.value = !fullSeriesCollapsed.value },
+    class: 'cursor-pointer select-none',
+  },
 }
 const seasonCleanupsPt = {
-  header: { onClick: () => { seasonCleanupsCollapsed.value = !seasonCleanupsCollapsed.value }, class: 'cursor-pointer select-none' },
-  togglebutton: _toggleButtonPt,
+  header: {
+    onClick: () => { seasonCleanupsCollapsed.value = !seasonCleanupsCollapsed.value },
+    class: 'cursor-pointer select-none',
+  },
 }
 const moviesPt = {
-  header: { onClick: () => { moviesCollapsed.value = !moviesCollapsed.value }, class: 'cursor-pointer select-none' },
-  togglebutton: _toggleButtonPt,
+  header: {
+    onClick: () => { moviesCollapsed.value = !moviesCollapsed.value },
+    class: 'cursor-pointer select-none',
+  },
+}
+
+function proceedToCleanup() {
+  store.setCleanupSelection(selectedMovies.value, selectedFullSeries.value, selectedSeasonCleanups.value)
+  store.setWizardStep(4)
 }
 
 /** Auto-trigger prepare when entering this step (no manual button needed) */
@@ -156,13 +166,21 @@ onMounted(async () => {
 <template>
   <div class="space-y-6 w-full max-w-full">
     <div class="card p-3 sm:p-5 space-y-5">
-      <!-- Back button -->
+      <!-- Back / Proceed buttons -->
       <div class="flex items-center gap-3">
         <Button
           label="Back"
           icon="pi pi-arrow-left"
           severity="secondary"
           @click="store.setWizardStep(2)"
+        />
+        <Button
+          v-if="hasResults"
+          label="Proceed to Cleanup"
+          icon="pi pi-arrow-right"
+          iconPos="right"
+          severity="danger"
+          @click="proceedToCleanup"
         />
       </div>
 
@@ -241,9 +259,10 @@ onMounted(async () => {
         class="max-w-full overflow-x-auto"
       >
         <template #header>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 w-full">
             <span class="font-semibold">Series to delete entirely</span>
             <Tag severity="danger" :value="String(visibleFullSeries.length)" rounded />
+            <i class="ml-auto pi" :class="fullSeriesCollapsed ? 'pi-chevron-down' : 'pi-chevron-up'" />
           </div>
         </template>
         <p class="text-xs text-surface-400 mb-3">Delete series and all files from Sonarr</p>
@@ -279,9 +298,10 @@ onMounted(async () => {
         class="max-w-full overflow-x-auto"
       >
         <template #header>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 w-full">
             <span class="font-semibold">Seasons to clean</span>
             <Tag severity="warn" :value="String(visibleSeasonCleanups.length)" rounded />
+            <i class="ml-auto pi" :class="seasonCleanupsCollapsed ? 'pi-chevron-down' : 'pi-chevron-up'" />
           </div>
         </template>
         <p class="text-xs text-surface-400 mb-3">Delete episode files and unmonitor seasons in Sonarr</p>
@@ -338,9 +358,10 @@ onMounted(async () => {
         class="max-w-full overflow-x-auto"
       >
         <template #header>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 w-full">
             <span class="font-semibold">Movies to delete</span>
             <Tag severity="danger" :value="String(visibleMovies.length)" rounded />
+            <i class="ml-auto pi" :class="moviesCollapsed ? 'pi-chevron-down' : 'pi-chevron-up'" />
           </div>
         </template>
         <p class="text-xs text-surface-400 mb-3">Delete movie and files from Radarr</p>
@@ -379,3 +400,9 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+:deep(.p-panel-toggle-button) {
+  display: none !important;
+}
+</style>

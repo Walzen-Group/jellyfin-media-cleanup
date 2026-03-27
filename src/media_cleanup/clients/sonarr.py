@@ -133,6 +133,15 @@ class SonarrClient:
     #  Deletion + season management
     # ------------------------------------------------------------------ #
 
+    def get_series(self, series_id: int) -> dict:
+        """GET /api/v3/series/{id}. Raises requests.HTTPError on 404."""
+        res = requests.get(
+            f'{self.root_url}/api/v3/series/{series_id}',
+            headers=self._header,
+        )
+        res.raise_for_status()
+        return res.json()
+
     def delete_series(self, series_id: int, delete_files: bool = True) -> None:
         """Delete a series from Sonarr by its database ID.
 
@@ -215,6 +224,20 @@ class SonarrClient:
             headers=self._header,
         )
         res.raise_for_status()
+
+    def tag_series(self, series_id: int, tag_id: int) -> None:
+        """Add a tag to a series. Fetches current tags, appends, PUTs back."""
+        series = self.get_series(series_id)
+        tags = series.get("tags", [])
+        if tag_id not in tags:
+            tags.append(tag_id)
+            series["tags"] = tags
+            resp = requests.put(
+                f"{self.root_url}/api/v3/series/{series_id}",
+                json=series,
+                headers=self._header,
+            )
+            resp.raise_for_status()
 
     # ------------------------------------------------------------------ #
     #  Auth

@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import { provide } from 'vue'
+import { ref, provide } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useJobStore } from './stores/jobStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWebSocket } from './composables/useWebSocket'
 import DashboardView from './views/DashboardView.vue'
+import HistoryPanel from './components/HistoryPanel.vue'
 import ThemeToggle from './components/ThemeToggle.vue'
+import Button from 'primevue/button'
+import ButtonGroup from 'primevue/buttongroup'
+import Message from 'primevue/message'
 
 useThemeStore()
 const store = useJobStore()
@@ -15,6 +20,9 @@ onMessage((msg) => store.handleWebSocketMessage(msg))
 provide('wsConnected', isConnected)
 
 const gitHash = __GIT_HASH__
+
+const { isCleanupRunning } = storeToRefs(store)
+const activeView = ref<'wizard' | 'history'>('wizard')
 </script>
 
 <template>
@@ -31,6 +39,24 @@ const gitHash = __GIT_HASH__
         Wedia Cleanup
       </h1>
       <div class="flex items-center gap-2 sm:gap-4">
+        <!-- View toggle -->
+        <ButtonGroup>
+          <Button
+            icon="pi pi-list"
+            size="small"
+            :severity="activeView === 'wizard' ? 'contrast' : 'secondary'"
+            v-tooltip="'Wizard'"
+            @click="activeView = 'wizard'"
+          />
+          <Button
+            icon="pi pi-history"
+            size="small"
+            :severity="activeView === 'history' ? 'contrast' : 'secondary'"
+            :disabled="isCleanupRunning"
+            v-tooltip="isCleanupRunning ? 'Navigation locked during cleanup' : 'History'"
+            @click="activeView = 'history'"
+          />
+        </ButtonGroup>
         <ThemeToggle />
         <span class="text-xs text-indigo-300/75 font-mono hidden sm:inline">{{ gitHash }}</span>
         <div class="flex items-center gap-2 text-sm text-indigo-200">
@@ -42,8 +68,18 @@ const gitHash = __GIT_HASH__
         </div>
       </div>
     </header>
+
     <main class="mx-auto px-2 sm:px-6 py-4 sm:py-6 w-full sm:w-[90%]">
-      <DashboardView />
+      <Message
+        v-if="isCleanupRunning"
+        severity="warn"
+        :closable="false"
+        class="mb-4"
+      >
+        Cleanup in progress — navigation is locked until complete.
+      </Message>
+      <DashboardView v-if="activeView === 'wizard'" />
+      <HistoryPanel v-else />
     </main>
   </div>
 </template>

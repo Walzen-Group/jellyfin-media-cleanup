@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import type {
   AnalysisRequest, FullJobResponse, JobResponse, WebSocketMessage,
   MovieRow, SeriesRow, FilteredResult, RunPlan,
+  CleanupLogEntry, CleanupReport,
+  MovieDeletion, FullSeriesDeletion, SeasonCleanup,
 } from '../types/api'
 import { useApi } from '../composables/useApi'
 
@@ -26,6 +28,21 @@ export const useJobStore = defineStore('job', () => {
   const lastFilterMinSizeBytes = ref<number>(0)
   const lastFilterMaxSizeBytes = ref<number | null>(null)
   const mediaType = ref<'all' | 'movies' | 'series'>('all')
+
+  // Cleanup execution state
+  const cleanupJobId = ref<string | null>(null)
+  const cleanupReport = ref<CleanupReport | null>(null)
+  const isCleanupRunning = ref(false)
+  const cleanupTotalItems = ref(0)
+  const cleanupLog = ref<CleanupLogEntry[]>([])
+  const cleanupSimulate = ref(true)
+  const applyAutoKeep = ref(true)
+  const hasCleanupHistory = ref(false)
+
+  // User selections from PreparePanel (Step 3) for display in CleanupPanel (Step 4)
+  const selectedMovieDeletions = ref<MovieDeletion[]>([])
+  const selectedFullSeriesDeletions = ref<FullSeriesDeletion[]>([])
+  const selectedSeasonCleanups = ref<SeasonCleanup[]>([])
 
   const isAnalyzing = computed(() => {
     const s = currentJob.value?.status
@@ -132,6 +149,15 @@ export const useJobStore = defineStore('job', () => {
     } finally {
       prepareLoading.value = false
     }
+  }
+
+  /**
+   * Save user's checkbox selections from PreparePanel before navigating to cleanup.
+   */
+  function setCleanupSelection(movies: MovieDeletion[], fullSeries: FullSeriesDeletion[], seasonCleanups: SeasonCleanup[]) {
+    selectedMovieDeletions.value = movies
+    selectedFullSeriesDeletions.value = fullSeries
+    selectedSeasonCleanups.value = seasonCleanups
   }
 
   /**
@@ -283,6 +309,100 @@ export const useJobStore = defineStore('job', () => {
           error.value = msg.error ?? 'Analysis failed'
         }
         break
+      case 'cleanup_started':
+        cleanupJobId.value = msg.jobId
+        isCleanupRunning.value = true
+        cleanupTotalItems.value = msg.totalItems
+        cleanupSimulate.value = msg.simulate
+        cleanupLog.value = []
+        cleanupReport.value = null
+        break
+      case 'cleanup_progress':
+        cleanupLog.value.push({
+          mediaType: msg.mediaType,
+          title: msg.title,
+          path: '',
+          status: msg.status,
+          sizeBytes: msg.sizeBytes,
+          verified: true,
+        })
+        break
+      case 'cleanup_complete':
+        isCleanupRunning.value = false
+        hasCleanupHistory.value = true
+        if (cleanupJobId.value) {
+          api.getCleanupJob(cleanupJobId.value).then(j => {
+            cleanupReport.value = j.report ?? null
+            if (j.report) cleanupLog.value = j.report.entries
+          })
+        }
+        break
+      case 'cleanup_failed':
+      case 'cleanup_cancelled':
+        isCleanupRunning.value = false
+        break
+    }
+  }
+
+  /**
+   * Execute cleanup for the current analysis job.
+   */
+  async function executeCleanup(simulate: boolean) {
+    cleanupLog.value = []
+    cleanupReport.value = null
+    cleanupSimulate.value = simulate
+    try {
+      await api.executeCleanup({
+        simulate,
+        movies: selectedMovieDeletions.value,
+        fullSeries: selectedFullSeriesDeletions.value,
+        seasonCleanups: selectedSeasonCleanups.value,
+      })
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to start cleanup'
+    }
+  }
+
+  /**
+   * Cancel the currently running cleanup job.
+   */
+  async function cancelCleanup() {
+    if (!cleanupJobId.value) return
+    try {
+      await api.cancelCleanupJob(cleanupJobId.value)
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to cancel cleanup'
+    }
+  }
+
+  /**
+   * Rejoin a mid-run cleanup (e.g. after page reload). If active, restore state.
+   */
+  async function fetchCleanupCurrent() {
+    const job = await api.getCleanupCurrent()
+    if (!job) return
+    cleanupJobId.value = job.jobId
+    cleanupSimulate.value = job.simulate
+    if (job.status === 'running') {
+      isCleanupRunning.value = true
+    } else {
+      isCleanupRunning.value = false
+      if (job.report) {
+        cleanupReport.value = job.report
+        cleanupLog.value = job.report.entries
+      }
+    }
+  }
+
+  /**
+   * Check if deletion history data is available (for AnalysisControls indicator).
+   */
+  async function fetchHasCleanupHistory() {
+    try {
+      const result = await api.getCleanupHistoryHasData()
+      hasCleanupHistory.value = result.hasData
+    } catch {
+      hasCleanupHistory.value = false
     }
   }
 
@@ -317,6 +437,19 @@ export const useJobStore = defineStore('job', () => {
     lastFilterMinSizeBytes,
     lastFilterMaxSizeBytes,
     mediaType,
+    // Cleanup state
+    cleanupJobId,
+    cleanupReport,
+    isCleanupRunning,
+    cleanupTotalItems,
+    cleanupLog,
+    cleanupSimulate,
+    applyAutoKeep,
+    hasCleanupHistory,
+    selectedMovieDeletions,
+    selectedFullSeriesDeletions,
+    selectedSeasonCleanups,
+    setCleanupSelection,
     applyFilter,
     prepareRunPlan: prepareRunPlanAction,
     setWizardStep,
@@ -325,5 +458,9 @@ export const useJobStore = defineStore('job', () => {
     clearResults,
     fetchJobResult,
     handleWebSocketMessage,
+    executeCleanup,
+    cancelCleanup,
+    fetchCleanupCurrent,
+    fetchHasCleanupHistory,
   }
 })

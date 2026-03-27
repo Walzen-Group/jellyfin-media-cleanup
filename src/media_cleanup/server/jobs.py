@@ -19,6 +19,7 @@ from media_cleanup.models import (
     AnalysisRequest,
     AnalysisResult,
     JobStatus,
+    RunPlan,
     cleanup_result_to_response,
 )
 
@@ -31,6 +32,7 @@ class Job:
     status: JobStatus
     request: AnalysisRequest
     result: AnalysisResult | None = None
+    run_plan: "RunPlan | None" = None  # set by /prepare endpoint
     progress_percent: float = 0
     progress_step: str = ""
     created_at: str = ""
@@ -187,6 +189,8 @@ class JobManager:
             _step_names += ["Querying Jellyfin movie history", "Resolving movie paths", "Fetching Radarr library", "Matching movies"]
         if mode in ("all", "series"):
             _step_names += ["Querying Jellyfin episode history", "Parsing episode names", "Resolving show paths", "Fetching Sonarr library", "Matching seasons"]
+        if job.request.apply_auto_keep:
+            _step_names += ["Applying auto-keep tags"]
         _total_steps = len(_step_names)
 
         def progress_cb(step: str, current: int, total: int) -> None:
@@ -231,6 +235,7 @@ class JobManager:
                 mode=job.request.mode,
                 month_threshold=job.request.month_threshold,
                 precise_matching=job.request.precise_matching,
+                apply_auto_keep=job.request.apply_auto_keep,
                 progress_callback=progress_cb,
                 cancel_check=cancel_ck,
             )

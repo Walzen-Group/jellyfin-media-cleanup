@@ -1,4 +1,7 @@
-import type { AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse, RunPlan } from '../types/api'
+import type {
+  AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse, RunPlan,
+  CleanupExecuteRequest, CleanupJobResponse, CleanupReport, HistoryEntry,
+} from '../types/api'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
@@ -95,5 +98,87 @@ export function useApi() {
     })
   }
 
-  return { postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults, filterAnalysis, prepareRunPlan }
+  /**
+   * Execute a cleanup job for a given analysis job ID. simulate=true = dry run.
+   */
+  async function executeCleanup(req: CleanupExecuteRequest): Promise<CleanupJobResponse> {
+    return request('/api/cleanup/execute', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    })
+  }
+
+  /**
+   * Get the currently active cleanup job, or null if none (204).
+   */
+  async function getCleanupCurrent(): Promise<CleanupJobResponse | null> {
+    try {
+      return await request<CleanupJobResponse>('/api/cleanup/current')
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Get a specific cleanup job by ID.
+   */
+  async function getCleanupJob(id: string): Promise<CleanupJobResponse> {
+    return request(`/api/cleanup/jobs/${id}`)
+  }
+
+  /**
+   * Cancel a running cleanup job.
+   */
+  async function cancelCleanupJob(id: string): Promise<void> {
+    await request(`/api/cleanup/jobs/${id}/cancel`, { method: 'POST' })
+  }
+
+  /**
+   * Fetch all deletion history entries.
+   */
+  async function getCleanupHistory(): Promise<HistoryEntry[]> {
+    return request('/api/cleanup/history')
+  }
+
+  /**
+   * Check if any deletion history data exists (for the indicator in AnalysisControls).
+   */
+  async function getCleanupHistoryHasData(): Promise<{ hasData: boolean }> {
+    return request('/api/cleanup/history/has-data')
+  }
+
+  /**
+   * Delete a single history entry by DB id.
+   */
+  async function deleteHistoryEntry(id: number): Promise<void> {
+    await request(`/api/cleanup/history/${id}`, { method: 'DELETE' })
+  }
+
+  /**
+   * Clear all history entries.
+   */
+  async function clearCleanupHistory(): Promise<void> {
+    await request('/api/cleanup/history', { method: 'DELETE' })
+  }
+
+  /**
+   * Fetch the full cleanup report for a job.
+   */
+  async function getCleanupReport(jobId: string): Promise<CleanupReport> {
+    return request(`/api/cleanup/report/${jobId}`)
+  }
+
+  /**
+   * Returns the URL for downloading the YAML report. Navigate directly.
+   */
+  function getCleanupReportDownloadUrl(jobId: string): string {
+    return `${BASE_URL}/api/cleanup/report/${jobId}/download`
+  }
+
+  return {
+    postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults, filterAnalysis, prepareRunPlan,
+    executeCleanup, getCleanupCurrent, getCleanupJob, cancelCleanupJob,
+    getCleanupHistory, getCleanupHistoryHasData, deleteHistoryEntry, clearCleanupHistory,
+    getCleanupReport, getCleanupReportDownloadUrl,
+  }
 }

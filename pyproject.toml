@@ -24,6 +24,7 @@ packages = ["src/media_cleanup"]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.0.2",
     "pytest-recording>=0.13.4",
     "vcrpy>=8.1.1",

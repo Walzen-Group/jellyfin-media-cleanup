@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, inject, type Ref } from 'vue'
+import { ref, inject, onMounted, type Ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useJobStore } from '../stores/jobStore'
 import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
@@ -9,6 +10,7 @@ import ProgressBar from './ProgressBar.vue'
 import type { AnalysisRequest } from '../types/api'
 
 const store = useJobStore()
+const { applyAutoKeep, hasCleanupHistory } = storeToRefs(store)
 // Injected from App.vue; prevents starting analysis without a live WebSocket connection
 const wsConnected = inject<Ref<boolean>>('wsConnected', ref(false))
 
@@ -61,11 +63,16 @@ async function runAnalysis() {
       monthThreshold: Number(monthThreshold.value) || 24,
       addedThreshold: Number(addedThreshold.value) || 12,
       preciseMatching: preciseMatching.value,
+      applyAutoKeep: applyAutoKeep.value,
     })
   } finally {
     submitting.value = false
   }
 }
+
+onMounted(() => {
+  store.fetchHasCleanupHistory()
+})
 </script>
 
 <template>
@@ -114,6 +121,16 @@ async function runAnalysis() {
         </div>
       </div>
 
+      <div class="self-stretch flex flex-col">
+        <label class="flex items-center gap-1.5 text-xs font-medium text-surface-500 mb-1.5 uppercase tracking-wide">
+          Auto-keep re-requested
+          <i class="pi pi-info-circle text-surface-400 cursor-help" v-tooltip="'If media was previously deleted by this tool and appears in a new analysis, it will automatically be tagged as Keep in Radarr/Sonarr'" />
+        </label>
+        <div class="flex-1 flex items-center">
+          <ToggleSwitch v-model="applyAutoKeep" />
+        </div>
+      </div>
+
       <!-- State machine: not running -> show Run (disabled if WS not connected). Submitting -> show spinner. Running -> show Cancel. -->
       <Button
         v-if="!store.isAnalyzing && !submitting && !store.currentJob?.result"
@@ -149,6 +166,12 @@ async function runAnalysis() {
 
       <!-- Extra actions injected by parent (e.g. Next button) -->
       <div class="ml-auto"><slot name="actions" /></div>
+    </div>
+
+    <!-- History available indicator -->
+    <div v-if="hasCleanupHistory" class="flex items-center gap-1.5 text-xs text-primary-500">
+      <i class="pi pi-database" />
+      <span>Previous deletion data available, auto-keep is active</span>
     </div>
 
     <div v-if="store.error" class="text-red-500 text-sm">

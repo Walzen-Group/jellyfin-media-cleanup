@@ -13,7 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from media_cleanup.config import load_config
+from media_cleanup.database import Database
 from media_cleanup.server import routes
+from media_cleanup.server.cleanup_jobs import CleanupJobManager
 from media_cleanup.server.jobs import JobManager
 from media_cleanup.server.websocket import ConnectionManager
 
@@ -42,13 +44,18 @@ def create_app() -> FastAPI:
     # Shared instances
     config = load_config()
     manager = JobManager(config=config)
+    db = Database(config.db_path)
+    cleanup_manager = CleanupJobManager(config=config, db=db)
     ws_manager = ConnectionManager()
 
-    # Wire broadcast: job worker -> websocket clients
+    # Wire broadcast: workers -> websocket clients
     manager.set_broadcast(ws_manager.broadcast_sync)
+    cleanup_manager.set_broadcast(ws_manager.broadcast_sync)
 
-    # Inject manager into routes module
+    # Inject shared instances into routes module
     routes.job_manager = manager
+    routes.cleanup_manager = cleanup_manager
+    routes.db = db
     app.include_router(routes.router)
 
     # WebSocket endpoint

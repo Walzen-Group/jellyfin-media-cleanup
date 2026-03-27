@@ -27,6 +27,7 @@ class AppConfig:
     radarr_url: str = ""
     radarr_api_key: str = ""
     month_threshold: int = DEFAULT_MONTH_THRESHOLD
+    db_path: Path = Path("cleanup_history.db")
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -72,6 +73,9 @@ def load_config(path: Path | None = None) -> AppConfig:
     else:
         month_threshold = DEFAULT_MONTH_THRESHOLD
 
+    db_path_env = os.environ.get("CLEANUP_DB_PATH")
+    db_path = Path(db_path_env) if db_path_env else Path("cleanup_history.db")
+
     return AppConfig(
         jellyfin_url=_get("JELLYFIN_URL", "jellyfin", "url"),
         jellyfin_api_key=_get("JELLYFIN_API_KEY", "jellyfin", "api_key"),
@@ -80,4 +84,5 @@ def load_config(path: Path | None = None) -> AppConfig:
         radarr_url=_get("RADARR_URL", "radarr", "url"),
         radarr_api_key=_get("RADARR_API_KEY", "radarr", "api_key"),
         month_threshold=month_threshold,
+        db_path=db_path,
     )

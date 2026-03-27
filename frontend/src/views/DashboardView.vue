@@ -4,9 +4,11 @@
  * Step 1 "Analysis" - run analysis, view full results
  * Step 2 "Selection" - filter by category and greedy mode
  * Step 3 "Prepare" - dry-run deletion preview (run plan)
- * Step 4 "Cleanup" - coming soon
+ * Step 4 "Cleanup" - execute or simulate deletion
  */
 
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useJobStore } from '../stores/jobStore'
 import Stepper from 'primevue/stepper'
 import StepList from 'primevue/steplist'
@@ -20,23 +22,32 @@ import TabPanels from 'primevue/tabpanels'
 import TabPanel from 'primevue/tabpanel'
 import Button from 'primevue/button'
 import ProgressSpinner from 'primevue/progressspinner'
+import Message from 'primevue/message'
 import AnalysisControls from '../components/AnalysisControls.vue'
 import SummaryPanel from '../components/SummaryPanel.vue'
 import MovieTable from '../components/MovieTable.vue'
 import SeriesTable from '../components/SeriesTable.vue'
 import SelectionPanel from '../components/SelectionPanel.vue'
 import PreparePanel from '../components/PreparePanel.vue'
+import CleanupPanel from '../components/CleanupPanel.vue'
 
 const store = useJobStore()
+const { isCleanupRunning, currentJob } = storeToRefs(store)
+
+const autoKeepCount = computed(() => {
+  const ak = currentJob.value?.result?.autoKeep
+  if (!ak) return 0
+  return (ak.movies?.length ?? 0) + (ak.series?.length ?? 0)
+})
 </script>
 
 <template>
   <Stepper v-model:value="store.wizardStep" linear>
     <StepList>
-      <StepItem :value="1">Analysis</StepItem>
-      <StepItem :value="2">Selection</StepItem>
-      <StepItem :value="3">Prepare</StepItem>
-      <StepItem :value="4" :disabled="true">Cleanup</StepItem>
+      <StepItem :value="1" :disabled="isCleanupRunning">Analysis</StepItem>
+      <StepItem :value="2" :disabled="isCleanupRunning">Selection</StepItem>
+      <StepItem :value="3" :disabled="isCleanupRunning">Prepare</StepItem>
+      <StepItem :value="4">Cleanup</StepItem>
     </StepList>
     <StepPanels>
       <StepPanel :value="1">
@@ -53,6 +64,15 @@ const store = useJobStore()
               />
             </template>
           </AnalysisControls>
+
+          <!-- Auto-keep notification: items re-requested after prior deletion -->
+          <Message
+            v-if="autoKeepCount > 0"
+            severity="info"
+            :closable="false"
+          >
+            {{ autoKeepCount }} item(s) were re-requested after deletion and have been automatically tagged as Keep.
+          </Message>
 
           <!-- Show results when a completed job result is available -->
           <template v-if="store.currentJob?.result">
@@ -111,9 +131,7 @@ const store = useJobStore()
       </StepPanel>
 
       <StepPanel :value="4">
-        <div class="card p-6 sm:p-12 flex flex-col items-center justify-center text-center">
-          <p class="text-surface-400 text-lg">Coming soon</p>
-        </div>
+        <CleanupPanel />
       </StepPanel>
     </StepPanels>
   </Stepper>

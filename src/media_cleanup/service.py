@@ -51,6 +51,8 @@ class CleanupResult:
     kept_season_matches: list[SeasonSummary] = field(default_factory=list)
     collision_movie_matches: list[MatchResult] = field(default_factory=list)
     collision_season_matches: list[SeasonSummary] = field(default_factory=list)
+    auto_kept_movies: list[MatchResult] = field(default_factory=list)
+    auto_kept_seasons: list[SeasonSummary] = field(default_factory=list)
     all_movies: list[Movie] = field(default_factory=list)
     all_series: list[Series] = field(default_factory=list)
     episodes: list[EpisodeInfo] = field(default_factory=list)
@@ -72,6 +74,7 @@ class CleanupService:
         mode: str = "all",
         month_threshold: int | None = None,
         precise_matching: bool = False,
+        apply_auto_keep: bool = True,
         progress_callback: ProgressCallback | None = None,
         cancel_check: CancelCheck | None = None,
     ) -> CleanupResult:
@@ -93,7 +96,7 @@ class CleanupService:
         result = CleanupResult()
         raw_cb = progress_callback or (lambda *_: None)
 
-        step_offsets, total_weight = get_pipeline_steps(mode, precise_matching)
+        step_offsets, total_weight = get_pipeline_steps(mode, precise_matching, apply_auto_keep)
 
         def cb(step: str, current: int, total: int) -> None:
             """Translate per-step (current/total) into global progress."""
@@ -350,6 +353,39 @@ class CleanupService:
             result.recent_seasons_unmatched = recent_unmatched
             result.old_seasons_unmatched = old_unmatched
 
+        # ===== AUTO-KEEP =====
+        if apply_auto_keep:
+            self._check_cancel(cancel_check)
+            from media_cleanup.auto_keep import apply_auto_keep as _apply_auto_keep
+            from media_cleanup.database import Database
+
+            db = Database(self._config.db_path)
+            all_movies = result.recent_movie_matches + result.old_movie_matches
+            all_seasons = result.recent_seasons_matched + result.old_seasons_matched
+            ak_result = _apply_auto_keep(
+                db, self._config, all_movies, all_seasons,
+                progress_callback=cb,
+                cancel_check=cancel_check,
+            )
+            result.auto_kept_movies = ak_result.movies
+            result.auto_kept_seasons = ak_result.seasons
+
+            # Remove auto-kept items from their original lists
+            ak_movie_paths = {m.matched_path for m in ak_result.movies}
+            ak_season_paths = {s.matched_sonarr_path for s in ak_result.seasons}
+            result.recent_movie_matches = [
+                m for m in result.recent_movie_matches if m.matched_path not in ak_movie_paths
+            ]
+            result.old_movie_matches = [
+                m for m in result.old_movie_matches if m.matched_path not in ak_movie_paths
+            ]
+            result.recent_seasons_matched = [
+                s for s in result.recent_seasons_matched if s.matched_sonarr_path not in ak_season_paths
+            ]
+            result.old_seasons_matched = [
+                s for s in result.old_seasons_matched if s.matched_sonarr_path not in ak_season_paths
+            ]
+
         return result
 
     # ------------------------------------------------------------------ #
@@ -386,10 +422,13 @@ SERIES_STEPS_PRECISE: list[tuple[str, int]] = [
     ("Fetching Sonarr library", 8),
     ("Matching seasons", 5),
 ]
+AUTO_KEEP_STEPS: list[tuple[str, int]] = [
+    ("Applying auto-keep tags", 3),
+]
 
 
 def get_pipeline_steps(
-    mode: str, precise_matching: bool = False,
+    mode: str, precise_matching: bool = False, apply_auto_keep: bool = True,
 ) -> tuple[dict[str, tuple[int, int]], int]:
     """
     Return ``(step_offsets, total_weight)`` for the given analysis mode.
@@ -402,6 +441,8 @@ def get_pipeline_steps(
         steps += MOVIE_STEPS
     if mode in ("all", "series"):
         steps += SERIES_STEPS_PRECISE if precise_matching else SERIES_STEPS
+    if apply_auto_keep:
+        steps += AUTO_KEEP_STEPS
     total_weight = sum(w for _, w in steps)
     offsets: dict[str, tuple[int, int]] = {}
     offset = 0

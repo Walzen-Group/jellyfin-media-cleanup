@@ -15,7 +15,14 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
-from media_cleanup.types import MediaStatus, MatchMethod, MediaMode, FilterCategory
+from media_cleanup.types import (
+    CleanupEntryStatus,
+    CleanupMediaType,
+    FilterCategory,
+    MediaMode,
+    MediaStatus,
+    MatchMethod,
+)
 
 from media_cleanup.matching import MatchResult
 from media_cleanup.schema.radarr_schema import Movie
@@ -75,6 +82,7 @@ class AnalysisRequest(_Base):
     month_threshold: int = 6
     added_threshold: int = 12  # months -- never-watched items added within this are "never_new"
     precise_matching: bool = True  # resolve all episodes for path matching (slower, handles multi-library)
+    apply_auto_keep: bool = True  # re-tag previously deleted items as "keep" if re-requested
 
 
 class JobStatus(StrEnum):
@@ -216,6 +224,7 @@ class AnalysisResult(_Base):
     unmatched: MediaSection
     never_watched: MediaSection
     never_new: MediaSection  # never watched but recently added
+    auto_keep: MediaSection = MediaSection()  # items re-tagged as keep from deletion history
     summary: SummaryModel
 
 
@@ -299,6 +308,67 @@ class RunPlan(_Base):
     summary: RunPlanSummary = RunPlanSummary()
 
 
+# ------------------------------------------------------------------
+#  Cleanup execution models
+# ------------------------------------------------------------------
+
+class CleanupLogEntry(_Base):
+    """Result of a single item in a cleanup run."""
+    media_type: CleanupMediaType
+    title: str
+    path: str
+    status: CleanupEntryStatus
+    error: str | None = None
+    size_bytes: int = 0
+    verified: bool = False
+
+
+class CleanupReport(_Base):
+    """Full report for a completed or in-progress cleanup job."""
+    job_id: str
+    simulate: bool
+    started_at: str
+    completed_at: str | None = None
+    entries: list[CleanupLogEntry] = []
+    total_size_bytes: int = 0
+    total_size_fmt: str = ""
+    deleted_count: int = 0
+    failed_count: int = 0
+
+
+class HistoryEntry(_Base):
+    """A row from the deleted_media history table."""
+    id: int
+    path: str
+    media_type: CleanupMediaType
+    title: str
+    sonarr_id: int | None = None
+    radarr_id: int | None = None
+    season_numbers: list[int] | None = None
+    deleted_at: str
+    size_bytes: int = 0
+    simulated: bool = False
+
+
+class CleanupExecuteRequest(_Base):
+    """Request body to start a cleanup execution with user-selected items."""
+    simulate: bool = True
+    movies: list[MovieDeletion] = []
+    full_series: list[FullSeriesDeletion] = []
+    season_cleanups: list[SeasonCleanup] = []
+
+
+class CleanupJobResponse(_Base):
+    """Status and result for a cleanup job."""
+    job_id: str
+    status: JobStatus
+    simulate: bool
+    created_at: str
+    completed_at: str | None = None
+    error: str | None = None
+    report: CleanupReport | None = None
+
+
 class ProgressMessage(_Base):
     """WebSocket progress message."""
     type: str
@@ -341,10 +411,15 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
     # Never-watched items -- split by added date
     all_movie_matches = result.recent_movie_matches + result.old_movie_matches
     watched_movie_paths = {
-        m.matched_path for m in all_movie_matches + result.kept_movie_matches + result.collision_movie_matches if m.matched_path
+        m.matched_path for m in (
+            all_movie_matches + result.kept_movie_matches
+            + result.collision_movie_matches + result.auto_kept_movies
+        ) if m.matched_path
     }
     all_season_matches = (
-        result.recent_seasons_matched + result.old_seasons_matched + result.kept_season_matches + result.collision_season_matches
+        result.recent_seasons_matched + result.old_seasons_matched
+        + result.kept_season_matches + result.collision_season_matches
+        + result.auto_kept_seasons
     )
     watched_series_paths = {
         s.matched_sonarr_path for s in all_season_matches if s.matched_sonarr_path
@@ -666,7 +741,11 @@ def cleanup_result_to_response(
 ) -> AnalysisResult:
     """Convert a CleanupResult into the API AnalysisResult model."""
     # Movies -- split by category, never-watched split by added date
-    all_matches = result.recent_movie_matches + result.old_movie_matches + result.kept_movie_matches + result.collision_movie_matches
+    all_matches = (
+        result.recent_movie_matches + result.old_movie_matches
+        + result.kept_movie_matches + result.collision_movie_matches
+        + result.auto_kept_movies
+    )
     watched_movie_paths = {m.matched_path for m in all_matches if m.matched_path}
     never_movies: list[MovieMatch] = []
     never_new_movies: list[MovieMatch] = []
@@ -697,6 +776,48 @@ def cleanup_result_to_response(
             series_by_cat["never"].append(g)
         elif g.status == MediaStatus.NEVER_NEW:
             series_by_cat["never_new"].append(g)
+
+    # Build auto-keep series groups from auto-kept seasons
+    auto_keep_series: list[SeriesGroup] = []
+    if result.auto_kept_seasons:
+        # Group auto-kept seasons by Sonarr path
+        ak_grouped: dict[str, list[SeasonSummary]] = defaultdict(list)
+        for s in result.auto_kept_seasons:
+            key = s.matched_sonarr_path or s.series_name
+            ak_grouped[key].append(s)
+
+        sonarr_lookup: dict[str, dict[int, int]] = {}
+        for s in result.all_series:
+            sonarr_lookup[s.path] = {
+                sn.season_number: sn.statistics.total_episode_count
+                for sn in s.seasons
+            }
+
+        for key, seasons in sorted(ak_grouped.items(), key=lambda x: x[1][0].series_name.lower()):
+            sorted_seasons = sorted(seasons, key=lambda s: s.season_number)
+            first = sorted_seasons[0]
+            sonarr_seasons = sonarr_lookup.get(key, {})
+            auto_keep_series.append(SeriesGroup(
+                title=first.series_name,
+                library_path=first.matched_sonarr_path,
+                match_method=first.match_method,
+                fuzzy_score=first.fuzzy_score,
+                status=MediaStatus.KEPT,
+                size_bytes=sum(s.size_on_disk for s in sorted_seasons),
+                sonarr_series_id=first.sonarr_series_id,
+                seasons=[
+                    SeasonInfo(
+                        season_number=s.season_number,
+                        last_played=s.last_played,
+                        episode_count=s.episode_count,
+                        total_episodes=sonarr_seasons.get(s.season_number, 0),
+                        size_bytes=s.size_on_disk,
+                        status=MediaStatus.KEPT,
+                        is_unwatched=s.is_unwatched,
+                    )
+                    for s in sorted_seasons
+                ],
+            ))
 
     return AnalysisResult(
         recently_watched=MediaSection(
@@ -738,6 +859,10 @@ def cleanup_result_to_response(
         never_new=MediaSection(
             movies=never_new_movies,
             series=series_by_cat.get("never_new", []),
+        ),
+        auto_keep=MediaSection(
+            movies=[match_result_to_model(m, status=MediaStatus.KEPT) for m in result.auto_kept_movies],
+            series=auto_keep_series,
         ),
         summary=build_summary(result, mode, added_threshold),
     )

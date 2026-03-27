@@ -17,6 +17,7 @@ export interface AnalysisRequest {
   monthThreshold: number        // Items not watched in N months are cleanup candidates
   addedThreshold: number        // Never-watched items added within N months are "new" (not deleted)
   preciseMatching: boolean      // Resolve all episodes for path matching (slower, handles multi-library)
+  applyAutoKeep: boolean        // Auto-tag re-requested media as Keep if it was previously deleted
 }
 
 export interface JobResponse {
@@ -158,6 +159,7 @@ export interface AnalysisResult {
   unmatched: MediaSection         // No matching library entry found (ambiguous)
   neverWatched: MediaSection      // Never watched (old; cleanup candidate)
   neverNew: MediaSection          // Never watched (recently added; keep)
+  autoKeep: MediaSection          // Re-requested after prior deletion; auto-tagged as Keep
   summary: Summary                // Aggregated statistics
 }
 
@@ -243,9 +245,69 @@ export interface RunPlan {
   summary: RunPlanSummary
 }
 
+export type CleanupMediaType = 'movie' | 'series' | 'season'
+export type CleanupEntryStatus = 'deleted' | 'simulated' | 'failed' | 'skipped'
+
+export interface CleanupLogEntry {
+  mediaType: CleanupMediaType
+  title: string
+  path: string
+  status: CleanupEntryStatus
+  error?: string
+  sizeBytes: number
+  verified: boolean
+}
+
+export interface CleanupReport {
+  jobId: string
+  simulate: boolean
+  startedAt: string
+  completedAt?: string
+  entries: CleanupLogEntry[]
+  totalSizeBytes: number
+  totalSizeFmt: string
+  deletedCount: number
+  failedCount: number
+}
+
+export interface CleanupJobResponse {
+  jobId: string
+  status: 'queued' | 'running' | 'complete' | 'cancelled' | 'failed'
+  simulate: boolean
+  createdAt: string
+  completedAt?: string
+  error?: string
+  report?: CleanupReport
+}
+
+export interface HistoryEntry {
+  id: number
+  path: string
+  mediaType: CleanupMediaType
+  title: string
+  sonarrId?: number
+  radarrId?: number
+  seasonNumbers?: number[]
+  deletedAt: string
+  sizeBytes: number
+  simulated: boolean
+}
+
+export interface CleanupExecuteRequest {
+  simulate: boolean
+  movies: MovieDeletion[]
+  fullSeries: FullSeriesDeletion[]
+  seasonCleanups: SeasonCleanup[]
+}
+
 export type WebSocketMessage =
   | { type: 'job_created'; job: JobResponse }
   | { type: 'job_progress'; jobId: string; step: string; percent: number; stepIndex: number; totalSteps: number }
   | { type: 'job_complete'; jobId: string }
   | { type: 'job_cancelled'; jobId: string }
   | { type: 'job_failed'; jobId: string; error: string }
+  | { type: 'cleanup_started'; jobId: string; simulate: boolean; totalItems: number }
+  | { type: 'cleanup_progress'; jobId: string; itemIndex: number; totalItems: number; title: string; mediaType: CleanupMediaType; status: CleanupEntryStatus; sizeBytes: number }
+  | { type: 'cleanup_complete'; jobId: string }
+  | { type: 'cleanup_failed'; jobId: string; error: string }
+  | { type: 'cleanup_cancelled'; jobId: string }

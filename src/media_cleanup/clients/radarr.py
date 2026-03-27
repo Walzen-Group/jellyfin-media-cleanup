@@ -58,6 +58,15 @@ class RadarrClient:
             return movies
         return [m for m in movies if keep_tag_id not in m.tags]
 
+    def get_movie(self, movie_id: int) -> dict:
+        """GET /api/v3/movie/{id}. Raises requests.HTTPError on 404."""
+        res = requests.get(
+            f'{self.root_url}/api/v3/movie/{movie_id}',
+            headers=self._header,
+        )
+        res.raise_for_status()
+        return res.json()
+
     def delete_movie(self, movie_id: int, delete_files: bool = True) -> None:
         """Delete a movie from Radarr by its database ID.
 
@@ -71,6 +80,20 @@ class RadarrClient:
             headers=self._header,
         )
         res.raise_for_status()
+
+    def tag_movie(self, movie_id: int, tag_id: int) -> None:
+        """Add a tag to a movie. Fetches current tags, appends, PUTs back."""
+        movie = self.get_movie(movie_id)
+        tags = movie.get("tags", [])
+        if tag_id not in tags:
+            tags.append(tag_id)
+            movie["tags"] = tags
+            resp = requests.put(
+                f"{self.root_url}/api/v3/movie/{movie_id}",
+                json=movie,
+                headers=self._header,
+            )
+            resp.raise_for_status()
 
     @property
     def _header(self) -> dict[str, str]:

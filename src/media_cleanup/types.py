@@ -30,6 +30,21 @@ class MatchMethod(StrEnum):
     SYNTHETIC = "synthetic"
 
 
+class CleanupMediaType(StrEnum):
+    """The type of media being cleaned up."""
+    MOVIE = "movie"
+    SERIES = "series"
+    SEASON = "season"
+
+
+class CleanupEntryStatus(StrEnum):
+    """The outcome of a single cleanup operation."""
+    DELETED = "deleted"
+    SIMULATED = "simulated"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 MediaMode = Literal["all", "movies", "series"]
 FilterCategory = Literal["old", "never", "never_new"]
 
