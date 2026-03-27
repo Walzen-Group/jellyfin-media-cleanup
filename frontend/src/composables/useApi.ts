@@ -2,18 +2,37 @@ import type {
   AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse, RunPlan,
   CleanupExecuteRequest, CleanupJobResponse, CleanupReport, HistoryEntry,
 } from '../types/api'
+import { useAuth } from './useAuth'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
 /**
  * Generic fetch wrapper. Handles 204 No Content responses (no current job).
  * Throws on non-2xx status. Returns parsed JSON on success or undefined for empty responses.
+ * Automatically attaches OIDC Bearer token when available.
  */
 async function request<T = void>(path: string, options?: RequestInit): Promise<T> {
+  const { getAccessToken } = useAuth()
+  const token = getAccessToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string>),
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   })
+  // 401 means the token is expired or invalid on the backend.
+  // Clear local session state (without redirecting to the OIDC provider, which
+  // may loop if the provider session is also dead) so the login screen appears.
+  if (res.status === 401) {
+    const { clearSession } = useAuth()
+    await clearSession()
+    throw new Error('Authentication expired. Please log in again.')
+  }
   if (!res.ok) {
     throw new Error(`API error: ${res.status} ${res.statusText}`)
   }

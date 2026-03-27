@@ -1,5 +1,6 @@
 import { ref, onUnmounted } from 'vue'
 import type { WebSocketMessage } from '../types/api'
+import { useAuth } from './useAuth'
 
 /**
  * Composable for WebSocket connection with exponential backoff reconnection.
@@ -21,7 +22,10 @@ export function useWebSocket() {
 
   function getWsUrl(): string {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${proto}//${window.location.host}/ws`
+    const { getAccessToken } = useAuth()
+    const token = getAccessToken()
+    const baseUrl = `${proto}//${window.location.host}/ws`
+    return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl
   }
 
   /**

@@ -40,6 +40,55 @@ radarr:
   keep_tag: "keep"        # optional
 ```
 
+## Authentication (OIDC / Authentik)
+
+The server supports OIDC authentication via Authentik (or any OpenID Connect provider). Auth is **enabled by default** and configured entirely via environment variables.
+
+### Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OIDC_ISSUER` | Yes | Authentik provider URL, e.g. `https://auth.example.com/application/o/media-cleanup/` |
+| `OIDC_CLIENT_ID` | Yes | OAuth2 client ID from Authentik |
+| `OIDC_AUDIENCE` | No | Token audience claim (defaults to `OIDC_CLIENT_ID` if unset) |
+| `OIDC_DISABLE` | No | Set to `true` to disable auth entirely |
+| `MASTER_TOKEN` | No | Static bearer token that bypasses OIDC (useful for API access / development) |
+
+### Authentik setup
+
+1. In Authentik, go to **Applications > Providers** and create a new **OAuth2/OpenID Provider**:
+   - **Name**: `media-cleanup` (or any name)
+   - **Authorization flow**: select your preferred flow (e.g. `default-authorization-flow`)
+   - **Client type**: `Public`
+   - **Client ID**: copy this to `OIDC_CLIENT_ID`
+   - **Redirect URIs/Origins (RegEx)**:
+     - Development: `http://localhost:5173/callback`
+     - Production: `https://your-domain/callback`
+   - **Signing Key**: select an RSA or EC key (Authentik usually has a default)
+   - **Scopes**: ensure `openid`, `profile`, `email` are included
+
+2. Go to **Applications** and create a new **Application**:
+   - **Name**: `Jellyfin Media Cleanup`
+   - **Slug**: `media-cleanup`
+   - **Provider**: select the provider you just created
+   - **Launch URL**: `https://your-domain` (or `http://localhost:5173` for dev)
+
+3. Set your environment variables:
+   ```bash
+   OIDC_ISSUER=https://auth.example.com/application/o/media-cleanup/
+   OIDC_CLIENT_ID=your-client-id-from-step-1
+   ```
+
+4. The frontend will automatically show a "Sign in with SSO" button. Users can also sign in with a master token if `MASTER_TOKEN` is set.
+
+### Disabling auth
+
+For local development without Authentik:
+
+```bash
+OIDC_DISABLE=true
+```
+
 ## Running
 
 ### CLI
