@@ -83,7 +83,11 @@ export function useAuth() {
   }
 
   async function login() {
-    await userManager?.signinRedirect()
+    try {
+      await userManager?.signinRedirect()
+    } catch (e) {
+      console.error('OIDC signinRedirect error:', e)
+    }
   }
 
   async function logout() {

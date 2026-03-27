@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import type { WebSocketMessage } from '../types/api'
 import { useAuth } from './useAuth'
 
@@ -133,8 +133,16 @@ export function useWebSocket() {
     ws = null
   }
 
-  // Start connection immediately on creation
-  connect()
+  // Connect when authenticated; watch for login events
+  const { isAuthenticated } = useAuth()
+  if (isAuthenticated.value) {
+    connect()
+  }
+  watch(isAuthenticated, (authed) => {
+    if (authed && !isConnected.value && !stopped) {
+      connect()
+    }
+  })
 
   // Cleanup on component unmount
   onUnmounted(() => {

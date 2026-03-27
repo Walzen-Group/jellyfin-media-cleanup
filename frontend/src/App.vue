@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, provide, onMounted } from 'vue'
+import { ref, provide, watch, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useJobStore } from './stores/jobStore'
 import { useThemeStore } from './stores/themeStore'
@@ -35,16 +35,24 @@ async function handleTokenLogin() {
 
 useThemeStore()
 const store = useJobStore()
-const { isConnected, onMessage } = useWebSocket()
-onMessage((msg) => store.handleWebSocketMessage(msg))
-
-// Provide WebSocket connection state so child components can disable actions when disconnected
-provide('wsConnected', isConnected)
+const { isCleanupRunning } = storeToRefs(store)
 
 const gitHash = __GIT_HASH__
-
-const { isCleanupRunning } = storeToRefs(store)
 const activeView = ref<'wizard' | 'history'>('wizard')
+
+// Defer WebSocket setup until authenticated
+const isConnected = ref(false)
+provide('wsConnected', isConnected)
+
+watch(isAuthenticated, (authed) => {
+  if (authed) {
+    const ws = useWebSocket()
+    isConnected.value = ws.isConnected.value
+    watch(ws.isConnected, (v) => { isConnected.value = v })
+    ws.onMessage((msg) => store.handleWebSocketMessage(msg))
+    store.restoreCurrentJob()
+  }
+}, { immediate: true })
 
 onMounted(() => {
   init()

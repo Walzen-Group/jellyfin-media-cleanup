@@ -188,7 +188,8 @@ export const useJobStore = defineStore('job', () => {
     }
   }
 
-  restoreCurrentJob()
+  // Defer restore until authenticated — called from App.vue after login
+  // restoreCurrentJob() is exposed and called externally
 
   async function startAnalysis(request: AnalysisRequest) {
     error.value = null
@@ -462,5 +463,6 @@ export const useJobStore = defineStore('job', () => {
     cancelCleanup,
     fetchCleanupCurrent,
     fetchHasCleanupHistory,
+    restoreCurrentJob,
   }
 })

@@ -126,7 +126,18 @@ def create_app() -> FastAPI:
 
     # Serve frontend static files if the build directory exists
     if _FRONTEND_DIR.is_dir():
-        app.mount("/", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="frontend")
+        from fastapi.responses import FileResponse
+
+        app.mount("/assets", StaticFiles(directory=str(_FRONTEND_DIR / "assets")), name="assets")
+
+        # SPA catch-all: serve index.html for any non-API, non-WS route
+        # so client-side routes like /callback and /silent-renew work
+        @app.get("/{path:path}")
+        async def spa_fallback(path: str) -> FileResponse:
+            file_path = _FRONTEND_DIR / path
+            if file_path.is_file():
+                return FileResponse(file_path)
+            return FileResponse(_FRONTEND_DIR / "index.html")
 
     return app
 
