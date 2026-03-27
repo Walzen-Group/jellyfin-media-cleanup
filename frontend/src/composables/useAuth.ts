@@ -63,6 +63,18 @@ export function useAuth() {
       if (existing && !existing.expired) {
         user.value = existing
         isAuthenticated.value = true
+      } else if (existing && existing.expired && existing.refresh_token) {
+        // Access token expired but we have a refresh token -- try silent renew
+        try {
+          const renewed = await userManager.signinSilent()
+          if (renewed) {
+            user.value = renewed
+            isAuthenticated.value = true
+          }
+        } catch (e) {
+          console.error('Silent renew with refresh token failed:', e)
+          await userManager.removeUser()
+        }
       }
     } catch (e) {
       console.error('Failed to get user:', e)
