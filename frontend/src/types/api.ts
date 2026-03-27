@@ -41,6 +41,7 @@ export interface MovieMatch {
   ambiguityReason: string | null
   added: string
   status: MediaStatus
+  radarrId: number | null
 }
 
 export interface SeasonInfo {
@@ -61,7 +62,9 @@ export interface SeriesGroup {
   sizeBytes: number
   status: MediaStatus
   seasons: SeasonInfo[]
+  totalSeasonCount: number
   collidingNames: string[]
+  sonarrSeriesId: number | null
 }
 
 export interface MediaSection {
@@ -174,6 +177,7 @@ export interface SeriesRow extends SeriesGroup {
 export interface FilterRequest {
   categories: string[]  // "old" | "never" | "never_new"
   greedy: boolean
+  mediaType?: 'all' | 'movies' | 'series'  // default: "all"
 }
 
 export interface FilteredSummary {
@@ -193,6 +197,47 @@ export interface FilteredResult {
   movies: MovieMatch[]
   series: SeriesGroup[]
   summary: FilteredSummary
+}
+
+export interface MovieDeletion {
+  radarrId: number
+  title: string
+  libraryPath: string
+  sizeBytes: number
+}
+
+export interface FullSeriesDeletion {
+  sonarrSeriesId: number
+  title: string
+  libraryPath: string
+  sizeBytes: number
+  seasonCount: number
+}
+
+export interface SeasonCleanup {
+  sonarrSeriesId: number
+  title: string
+  libraryPath: string
+  seasonNumbers: number[]
+  totalSizeBytes: number
+  episodeFileCount: number
+  totalSeasonCount: number
+  totalEpisodeCount: number
+}
+
+export interface RunPlanSummary {
+  movieCount: number
+  fullSeriesCount: number
+  seasonCleanupCount: number
+  totalSize: number
+  totalSizeFmt: string
+}
+
+export interface RunPlan {
+  movies: MovieDeletion[]
+  fullSeries: FullSeriesDeletion[]
+  seasonCleanups: SeasonCleanup[]
+  summary: RunPlanSummary
 }
 
 export type WebSocketMessage =

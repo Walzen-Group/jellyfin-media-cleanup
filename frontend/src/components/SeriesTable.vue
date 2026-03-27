@@ -89,12 +89,12 @@ const filteredCount = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-3 overflow-x-auto">
     <div class="flex flex-wrap items-center gap-3">
       <InputText
         v-model="(filters.global as any).value"
         placeholder="Search series..."
-        class="!text-sm"
+        class="!text-sm w-72"
       />
       <span class="text-sm text-surface-500 ml-auto">
         {{ filteredCount }} of {{ series.length }} series
@@ -177,7 +177,7 @@ const filteredCount = computed(() => {
 
       <!-- Expandable row: shows all seasons for this series, collision details (if any), and library path -->
       <template #expansion="{ data }">
-        <div class="pl-10 pr-4 py-2">
+        <div class="pl-2 pr-1 sm:pl-10 sm:pr-4 py-2">
           <!-- Season breakdown table: watch status, available/on-disk, last played, episode counts, sizes -->
           <DataTable :value="data.seasons" size="small" tableClass="text-xs" tableStyle="table-layout: fixed" :rowClass="(s: any) => seasonRowClass(s.status)">
             <Column field="seasonNumber" header="Season" sortable>

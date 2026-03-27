@@ -1,9 +1,10 @@
 <script setup lang="ts">
 /**
  * Main dashboard view wrapped in a PrimeVue Stepper.
- * Step 1 "Analysis" — run analysis, view full results
- * Step 2 "Selection" — filter by category and greedy mode
- * Step 3 "Cleanup" — coming soon
+ * Step 1 "Analysis" - run analysis, view full results
+ * Step 2 "Selection" - filter by category and greedy mode
+ * Step 3 "Prepare" - dry-run deletion preview (run plan)
+ * Step 4 "Cleanup" - coming soon
  */
 
 import { useJobStore } from '../stores/jobStore'
@@ -24,6 +25,7 @@ import SummaryPanel from '../components/SummaryPanel.vue'
 import MovieTable from '../components/MovieTable.vue'
 import SeriesTable from '../components/SeriesTable.vue'
 import SelectionPanel from '../components/SelectionPanel.vue'
+import PreparePanel from '../components/PreparePanel.vue'
 
 const store = useJobStore()
 </script>
@@ -33,7 +35,8 @@ const store = useJobStore()
     <StepList>
       <StepItem :value="1">Analysis</StepItem>
       <StepItem :value="2">Selection</StepItem>
-      <StepItem :value="3" :disabled="true">Cleanup</StepItem>
+      <StepItem :value="3">Prepare</StepItem>
+      <StepItem :value="4" :disabled="true">Cleanup</StepItem>
     </StepList>
     <StepPanels>
       <StepPanel :value="1">
@@ -57,24 +60,26 @@ const store = useJobStore()
             <SummaryPanel :summary="store.currentJob.result.summary" />
 
             <!-- Flattened tables with filtering/sorting. Series shown by default (first tab). -->
-            <Tabs value="series">
-              <TabList>
-                <Tab value="series">Series ({{ store.allSeries.length }})</Tab>
-                <Tab value="movies">Movies ({{ store.allMovies.length }})</Tab>
-              </TabList>
-              <TabPanels>
-                <TabPanel value="series">
-                  <div class="pt-4">
-                    <SeriesTable :series="store.allSeries" />
-                  </div>
-                </TabPanel>
-                <TabPanel value="movies">
-                  <div class="pt-4">
-                    <MovieTable :movies="store.allMovies" />
-                  </div>
-                </TabPanel>
-              </TabPanels>
-            </Tabs>
+            <div class="card px-1 py-2 sm:p-5">
+              <Tabs value="series">
+                <TabList>
+                  <Tab value="series">Series ({{ store.allSeries.length }})</Tab>
+                  <Tab value="movies">Movies ({{ store.allMovies.length }})</Tab>
+                </TabList>
+                <TabPanels>
+                  <TabPanel value="series">
+                    <div class="pt-4">
+                      <SeriesTable :series="store.allSeries" />
+                    </div>
+                  </TabPanel>
+                  <TabPanel value="movies">
+                    <div class="pt-4">
+                      <MovieTable :movies="store.allMovies" />
+                    </div>
+                  </TabPanel>
+                </TabPanels>
+              </Tabs>
+            </div>
 
           </template>
 
@@ -89,7 +94,7 @@ const store = useJobStore()
           <!-- Empty state: no job result yet; prompt user to run analysis -->
           <div
             v-else-if="!store.isAnalyzing"
-            class="card p-12 flex flex-col items-center justify-center text-center text-surface-500"
+            class="card p-6 sm:p-12 flex flex-col items-center justify-center text-center text-surface-500"
           >
             <p class="text-xl mb-2">No analysis results yet</p>
             <p class="text-sm">Configure options above and click "Run Analysis" to start.</p>
@@ -102,7 +107,11 @@ const store = useJobStore()
       </StepPanel>
 
       <StepPanel :value="3">
-        <div class="card p-12 flex flex-col items-center justify-center text-center">
+        <PreparePanel />
+      </StepPanel>
+
+      <StepPanel :value="4">
+        <div class="card p-6 sm:p-12 flex flex-col items-center justify-center text-center">
           <p class="text-surface-400 text-lg">Coming soon</p>
         </div>
       </StepPanel>

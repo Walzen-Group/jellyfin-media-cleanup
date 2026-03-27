@@ -10,12 +10,13 @@
       "Bash(pnpm --version)",
       "Bash(pnpm install:*)",
       "Bash(wait)",
-      "Bash(curl -i -N -H \"Connection: Upgrade\" -H \"Upgrade: websocket\" -H \"Sec-WebSocket-Version: 13\" -H \"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\" http://localhost:8000/ws)",
       "Bash(curl:*)",
       "Bash(docker exec:*)",
       "Bash(bun --version)",
       "mcp__plugin_context-mode_context-mode__ctx_execute",
-      "Bash(pnpm vue-tsc:*)"
+      "Bash(pnpm vue-tsc:*)",
+      "WebSearch",
+      "Bash(claude:*)"
     ]
   }
 }

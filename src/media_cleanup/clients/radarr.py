@@ -58,6 +58,20 @@ class RadarrClient:
             return movies
         return [m for m in movies if keep_tag_id not in m.tags]
 
+    def delete_movie(self, movie_id: int, delete_files: bool = True) -> None:
+        """Delete a movie from Radarr by its database ID.
+
+        Args:
+            movie_id: Radarr internal movie ID.
+            delete_files: If True, also delete the movie file(s) from disk.
+        """
+        res = requests.delete(
+            f'{self.root_url}/api/v3/movie/{movie_id}',
+            params={"deleteFiles": str(delete_files).lower()},
+            headers=self._header,
+        )
+        res.raise_for_status()
+
     @property
     def _header(self) -> dict[str, str]:
         return {

@@ -3,7 +3,35 @@ Shared data types used across the matching and output pipeline.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any, Literal, Optional
+
+
+# ------------------------------------------------------------------
+#  Typed enums and literals for strict typing
+# ------------------------------------------------------------------
+
+class MediaStatus(StrEnum):
+    """Watch/match status for movies and series."""
+    RECENT = "recent"
+    OLD = "old"
+    KEPT = "kept"
+    UNMATCHED = "unmatched"
+    NEVER = "never"
+    NEVER_NEW = "never_new"
+    COLLISION = "collision"
+    MIXED = "mixed"
+
+
+class MatchMethod(StrEnum):
+    """How a media item was matched to its library entry."""
+    PATH = "path"
+    FUZZY = "fuzzy"
+    SYNTHETIC = "synthetic"
+
+
+MediaMode = Literal["all", "movies", "series"]
+FilterCategory = Literal["old", "never", "never_new"]
 
 
 @dataclass
@@ -33,12 +61,14 @@ class SeasonSummary:
     # Filled in after matching against Sonarr
     size_on_disk: int = 0  # bytes, from Sonarr season statistics
     matched_sonarr_path: Optional[str] = None
-    match_method: Optional[str] = None   # "path" or "fuzzy"
+    match_method: Optional[str] = None   # "path", "fuzzy", or "synthetic"
     fuzzy_score: Optional[float] = None
     # Each candidate is a dict with "title", "library_path", and "score"
     ambiguous_candidates: list[dict[str, Any]] = field(default_factory=list)
     # True for synthetic seasons generated from Sonarr data (no Jellyfin watch history)
     is_unwatched: bool = False
+    # Sonarr series ID for deletion API
+    sonarr_series_id: Optional[int] = None
 
     @property
     def is_matched(self) -> bool:

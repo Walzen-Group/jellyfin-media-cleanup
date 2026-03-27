@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 from pydantic.alias_generators import to_camel
+
+from media_cleanup.types import MediaStatus, MatchMethod, MediaMode, FilterCategory
 
 from media_cleanup.matching import MatchResult
 from media_cleanup.schema.radarr_schema import Movie
@@ -52,16 +54,16 @@ def _format_size(total_bytes: int) -> str:
     return f"{gb:.1f} GB"
 
 
-def _never_status(added: str, threshold_months: int) -> str:
-    """Return 'never_new' if the item was added within threshold_months, else 'never'."""
+def _never_status(added: str, threshold_months: int) -> MediaStatus:
+    """Return NEVER_NEW if the item was added within threshold_months, else NEVER."""
     if not added:
-        return "never"
+        return MediaStatus.NEVER
     try:
         added_dt = datetime.fromisoformat(added.replace("Z", "+00:00"))
         cutoff = datetime.now(timezone.utc) - timedelta(days=threshold_months * 30)
-        return "never_new" if added_dt >= cutoff else "never"
+        return MediaStatus.NEVER_NEW if added_dt >= cutoff else MediaStatus.NEVER
     except (ValueError, TypeError):
-        return "never"
+        return MediaStatus.NEVER
 
 
 # ------------------------------------------------------------------
@@ -69,12 +71,12 @@ def _never_status(added: str, threshold_months: int) -> str:
 # ------------------------------------------------------------------
 
 class AnalysisRequest(_Base):
-    mode: str = "all"
+    mode: MediaMode = "all"
     month_threshold: int = 6
     added_threshold: int = 12  # months -- never-watched items added within this are "never_new"
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     queued = "queued"
     running = "running"
     complete = "complete"
@@ -104,14 +106,15 @@ class MovieMatch(_Base):
     title: str | None = None
     jellyfin_path: str
     library_path: str | None = None
-    match_method: str | None = None
+    match_method: MatchMethod | None = None
     fuzzy_score: float | None = None
     size_bytes: int = 0
     is_ambiguous: bool = False
     ambiguity_reason: str | None = None
     ambiguous_candidates: list[dict[str, Any]] = []
     added: str = ""  # ISO 8601 from Radarr
-    status: str = ""
+    status: MediaStatus | str = ""
+    radarr_id: int | None = None
 
 
 class SeasonInfo(_Base):
@@ -120,20 +123,22 @@ class SeasonInfo(_Base):
     episode_count: int
     total_episodes: int = 0
     size_bytes: int = 0
-    status: str = ""  # "recent", "old", "kept", "unmatched", "never"
+    status: MediaStatus | str = ""
     is_unwatched: bool = False  # True for synthetic seasons with no watch history
 
 
 class SeriesGroup(_Base):
     title: str
     library_path: str | None = None
-    match_method: str | None = None
+    match_method: MatchMethod | None = None
     fuzzy_score: float | None = None
     size_bytes: int = 0
-    status: str = ""  # "recent", "old", "mixed", "kept", "unmatched", "never", "never_new", "collision"
+    status: MediaStatus | str = ""
     added: str = ""  # ISO 8601 from Sonarr
     seasons: list[SeasonInfo] = []
+    total_season_count: int = 0  # total seasons from Sonarr (not just filtered)
     colliding_names: list[str] = []  # populated for collision entries
+    sonarr_series_id: int | None = None
 
 
 class MediaSection(_Base):
@@ -215,17 +220,9 @@ class AnalysisResult(_Base):
 
 class FilterRequest(_Base):
     """User's category selections for filtering."""
-    categories: list[str]  # subset of: "old", "never", "never_new"
-    greedy: bool = False    # True = include mixed-status series
-
-    @field_validator("categories")
-    @classmethod
-    def validate_categories(cls, v: list[str]) -> list[str]:
-        allowed = {"old", "never", "never_new"}
-        invalid = set(v) - allowed
-        if invalid:
-            raise ValueError(f"Invalid categories: {invalid}. Allowed: {allowed}")
-        return v
+    categories: list[FilterCategory]
+    greedy: bool = False
+    media_type: MediaMode = "all"
 
 
 class FilteredSummary(_Base):
@@ -247,6 +244,56 @@ class FilteredResult(_Base):
     movies: list[MovieMatch] = []
     series: list[SeriesGroup] = []
     summary: FilteredSummary = FilteredSummary()
+
+
+# ------------------------------------------------------------------
+#  Run plan models (dry-run deletion preview)
+# ------------------------------------------------------------------
+
+class MovieDeletion(_Base):
+    """A movie to delete from Radarr."""
+    radarr_id: int
+    title: str
+    library_path: str
+    size_bytes: int
+
+
+class FullSeriesDeletion(_Base):
+    """An entire series to delete from Sonarr."""
+    sonarr_series_id: int
+    title: str
+    library_path: str
+    size_bytes: int
+    season_count: int
+
+
+class SeasonCleanup(_Base):
+    """Partial season cleanup: delete episode files and unmonitor seasons."""
+    sonarr_series_id: int
+    title: str
+    library_path: str
+    season_numbers: list[int]
+    total_size_bytes: int
+    episode_file_count: int
+    total_season_count: int = 0
+    total_episode_count: int = 0
+
+
+class RunPlanSummary(_Base):
+    """Counts and totals for a run plan."""
+    movie_count: int = 0
+    full_series_count: int = 0
+    season_cleanup_count: int = 0
+    total_size: int = 0
+    total_size_fmt: str = ""
+
+
+class RunPlan(_Base):
+    """Dry-run deletion plan showing exactly what API calls will be made."""
+    movies: list[MovieDeletion] = []
+    full_series: list[FullSeriesDeletion] = []
+    season_cleanups: list[SeasonCleanup] = []
+    summary: RunPlanSummary = RunPlanSummary()
 
 
 class ProgressMessage(_Base):
@@ -304,7 +351,7 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
     never_new_movies: list[Movie] = []
     for m in result.all_movies:
         if m.path not in watched_movie_paths:
-            (never_new_movies if _never_status(m.added, added_threshold) == "never_new" else never_movies).append(m)
+            (never_new_movies if _never_status(m.added, added_threshold) == MediaStatus.NEVER_NEW else never_movies).append(m)
 
     never_series: list[Series] = []
     never_new_series: list[Series] = []
@@ -457,7 +504,7 @@ def _title_from_path(path: str) -> str:
     return parts[-1] if parts else path
 
 
-def match_result_to_model(mr: MatchResult, status: str = "") -> MovieMatch:
+def match_result_to_model(mr: MatchResult, status: MediaStatus | str = "") -> MovieMatch:
     title = mr.matched_title or _title_from_path(mr.jellyfin_path)
     return MovieMatch(
         title=title,
@@ -470,14 +517,15 @@ def match_result_to_model(mr: MatchResult, status: str = "") -> MovieMatch:
         ambiguity_reason=mr.ambiguity_reason,
         ambiguous_candidates=mr.ambiguous_candidates,
         status=status,
+        radarr_id=mr.radarr_movie_id,
     )
 
 
-def _derive_show_status(season_statuses: set[str]) -> str:
+def _derive_show_status(season_statuses: set[str]) -> MediaStatus | str:
     """Derive a show-level status from the set of its season statuses."""
     if len(season_statuses) == 1:
         return next(iter(season_statuses))
-    return "mixed"
+    return MediaStatus.MIXED
 
 
 def _build_all_series_groups(
@@ -490,26 +538,32 @@ def _build_all_series_groups(
     """
     # Sonarr lookup for total episode counts
     sonarr_lookup: dict[str, dict[int, int]] = {}
+    # Count of non-special seasons with files on disk per series path
+    sonarr_on_disk_count: dict[str, int] = {}
     for s in result.all_series:
         sonarr_lookup[s.path] = {
             sn.season_number: sn.statistics.total_episode_count
             for sn in s.seasons
         }
+        sonarr_on_disk_count[s.path] = len([
+            sn for sn in s.seasons
+            if sn.season_number > 0 and sn.statistics.size_on_disk > 0
+        ])
 
     # Collect all seasons with their status.
     # Synthetic (unwatched) seasons get overridden: "recent" list → "never_new"
     # (show is active), "old" list → "never" (show is abandoned).
     tagged: list[tuple[SeasonSummary, str]] = []
     for s in result.recent_seasons_matched:
-        tagged.append((s, "never_new" if s.is_unwatched else "recent"))
+        tagged.append((s, MediaStatus.NEVER_NEW if s.is_unwatched else MediaStatus.RECENT))
     for s in result.old_seasons_matched:
-        tagged.append((s, "never" if s.is_unwatched else "old"))
+        tagged.append((s, MediaStatus.NEVER if s.is_unwatched else MediaStatus.OLD))
     for s in result.kept_season_matches:
-        tagged.append((s, "kept"))
+        tagged.append((s, MediaStatus.KEPT))
     for s in result.recent_seasons_unmatched + result.old_seasons_unmatched:
-        tagged.append((s, "unmatched"))
+        tagged.append((s, MediaStatus.UNMATCHED))
     for s in result.collision_season_matches:
-        tagged.append((s, "collision"))
+        tagged.append((s, MediaStatus.COLLISION))
 
     # Group by show key
     grouped: dict[str, list[tuple[SeasonSummary, str]]] = defaultdict(list)
@@ -526,6 +580,13 @@ def _build_all_series_groups(
         sonarr_seasons = sonarr_lookup.get(key, {})
 
         distinct_names = sorted({s.series_name for s, _ in sorted_seasons})
+        # Use the first non-None sonarr_series_id from any season
+        sonarr_id = next(
+            (s.sonarr_series_id for s, _ in sorted_seasons if s.sonarr_series_id is not None),
+            None,
+        )
+        # Seasons with files on disk (excluding specials/S00)
+        total_sonarr_seasons = sonarr_on_disk_count.get(key, 0)
         groups.append(SeriesGroup(
             title=first_season.series_name,
             library_path=first_season.matched_sonarr_path,
@@ -534,6 +595,8 @@ def _build_all_series_groups(
             status=_derive_show_status(season_statuses),
             colliding_names=distinct_names if len(distinct_names) > 1 else [],
             size_bytes=sum(s.size_on_disk for s, _ in sorted_seasons),
+            sonarr_series_id=sonarr_id,
+            total_season_count=total_sonarr_seasons,
             seasons=[
                 SeasonInfo(
                     season_number=s.season_number,
@@ -553,12 +616,15 @@ def _build_all_series_groups(
     for series in result.all_series:
         if series.path not in watched_paths:
             never_status = _never_status(series.added, added_threshold)
+            never_season_count = len([sn for sn in series.seasons if sn.season_number > 0 and sn.statistics.size_on_disk > 0])
             groups.append(SeriesGroup(
                 title=series.title,
                 library_path=series.path,
                 status=never_status,
                 added=series.added,
                 size_bytes=series.statistics.size_on_disk,
+                sonarr_series_id=series.id,
+                total_season_count=never_season_count,
                 seasons=[
                     SeasonInfo(
                         season_number=sn.season_number,
@@ -577,7 +643,7 @@ def _build_all_series_groups(
     return groups
 
 
-def _movie_to_match(movie: Movie, status: str = "never") -> MovieMatch:
+def _movie_to_match(movie: Movie, status: MediaStatus = MediaStatus.NEVER) -> MovieMatch:
     """Convert a Radarr Movie to a MovieMatch model (for never-watched items)."""
     return MovieMatch(
         title=movie.title,
@@ -586,6 +652,7 @@ def _movie_to_match(movie: Movie, status: str = "never") -> MovieMatch:
         size_bytes=movie.size_on_disk,
         added=movie.added,
         status=status,
+        radarr_id=movie.id,
     )
 
 
@@ -604,7 +671,7 @@ def cleanup_result_to_response(
         if m.path not in watched_movie_paths:
             status = _never_status(m.added, added_threshold)
             match = _movie_to_match(m, status=status)
-            if status == "never_new":
+            if status == MediaStatus.NEVER_NEW:
                 never_new_movies.append(match)
             else:
                 never_movies.append(match)
@@ -613,41 +680,49 @@ def cleanup_result_to_response(
     all_series_groups = _build_all_series_groups(result, added_threshold)
     series_by_cat: dict[str, list[SeriesGroup]] = defaultdict(list)
     for g in all_series_groups:
-        if g.status == "recent":
+        if g.status == MediaStatus.RECENT:
             series_by_cat["recent"].append(g)
-        elif g.status in ("old", "mixed"):
+        elif g.status in (MediaStatus.OLD, MediaStatus.MIXED):
             series_by_cat["old"].append(g)
-        elif g.status == "kept":
+        elif g.status == MediaStatus.KEPT:
             series_by_cat["kept"].append(g)
-        elif g.status == "collision":
+        elif g.status == MediaStatus.COLLISION:
             series_by_cat["collision"].append(g)
-        elif g.status == "unmatched":
+        elif g.status == MediaStatus.UNMATCHED:
             series_by_cat["unmatched"].append(g)
-        elif g.status == "never":
+        elif g.status == MediaStatus.NEVER:
             series_by_cat["never"].append(g)
-        elif g.status == "never_new":
+        elif g.status == MediaStatus.NEVER_NEW:
             series_by_cat["never_new"].append(g)
 
     return AnalysisResult(
         recently_watched=MediaSection(
-            movies=[match_result_to_model(m, status="recent") for m in result.recent_movie_matches],
+            movies=[
+                match_result_to_model(m, status=MediaStatus.RECENT)
+                for m in result.recent_movie_matches
+                if m.is_matched
+            ],
             series=series_by_cat.get("recent", []),
         ),
         not_recently_watched=MediaSection(
-            movies=[match_result_to_model(m, status="old") for m in result.old_movie_matches],
+            movies=[
+                match_result_to_model(m, status=MediaStatus.OLD)
+                for m in result.old_movie_matches
+                if m.is_matched
+            ],
             series=series_by_cat.get("old", []),
         ),
         keep=MediaSection(
-            movies=[match_result_to_model(m, status="kept") for m in result.kept_movie_matches],
+            movies=[match_result_to_model(m, status=MediaStatus.KEPT) for m in result.kept_movie_matches],
             series=series_by_cat.get("kept", []),
         ),
         collision=MediaSection(
-            movies=[match_result_to_model(m, status="collision") for m in result.collision_movie_matches],
+            movies=[match_result_to_model(m, status=MediaStatus.COLLISION) for m in result.collision_movie_matches],
             series=series_by_cat.get("collision", []),
         ),
         unmatched=MediaSection(
             movies=[
-                match_result_to_model(m, status="unmatched")
+                match_result_to_model(m, status=MediaStatus.UNMATCHED)
                 for m in result.recent_movie_matches + result.old_movie_matches
                 if not m.is_matched
             ],
@@ -669,6 +744,7 @@ def filter_analysis_result(
     result: AnalysisResult,
     categories: list[str],
     greedy: bool = False,
+    media_type: str = "all",
 ) -> FilteredResult:
     """Filter an AnalysisResult down to user-selected categories.
 
@@ -693,15 +769,34 @@ def filter_analysis_result(
         section = section_map.get(cat)
         if section is None:
             continue
-        movies.extend(section.movies)
+        movies.extend(m for m in section.movies if m.status != MediaStatus.UNMATCHED)
         for s in section.series:
-            if not greedy and s.status == "mixed":
+            if s.status == MediaStatus.UNMATCHED:
                 continue
-            # Recalculate size_bytes to only sum seasons matching selected categories
-            matching_size = sum(
-                sn.size_bytes for sn in s.seasons if sn.status in categories
-            )
-            series.append(s.model_copy(update={"size_bytes": matching_size}))
+            if not greedy and s.status == MediaStatus.MIXED:
+                continue
+            # Filter out unmatched seasons and recalculate size
+            eligible_seasons = [
+                sn for sn in s.seasons
+                if sn.status != MediaStatus.UNMATCHED and sn.status in categories
+            ]
+            if not eligible_seasons:
+                continue
+            matching_size = sum(sn.size_bytes for sn in eligible_seasons)
+            # Keep all non-unmatched seasons so the frontend can grey out
+            # non-matching ones via activeCategories. Only recalculate size
+            # from the eligible seasons.
+            all_visible_seasons = [sn for sn in s.seasons if sn.status != MediaStatus.UNMATCHED]
+            series.append(s.model_copy(update={
+                "size_bytes": matching_size,
+                "seasons": all_visible_seasons,
+            }))
+
+    # Apply media_type filter
+    if media_type == "movies":
+        series = []
+    elif media_type == "series":
+        movies = []
 
     total_size = (
         sum(m.size_bytes for m in movies)
@@ -709,6 +804,7 @@ def filter_analysis_result(
     )
 
     # Count only seasons whose status matches the selected categories
+    # (unmatched seasons are already excluded from the series above)
     matching_season_count = sum(
         1 for s in series for sn in s.seasons if sn.status in categories
     )
@@ -753,5 +849,94 @@ def filter_analysis_result(
             total_season_count=total_season_count,
             total_library_size=total_library_size,
             total_library_size_fmt=_format_size(total_library_size),
+        ),
+    )
+
+
+def build_run_plan(filtered: FilteredResult, categories: list[str] | None = None) -> RunPlan:
+    """Build a dry-run deletion plan from a filtered result.
+
+    Determines which Radarr/Sonarr API calls would be needed to delete
+    the filtered items. Series are split into full deletions (all seasons
+    selected) vs partial cleanups (only some seasons selected).
+
+    Args:
+        filtered: The filtered analysis result.
+        categories: Active category filters (e.g. ["old", "never"]). When provided,
+            only seasons whose status matches are considered for the plan.
+            When None, all seasons in the filtered result are used.
+    """
+    movie_deletions: list[MovieDeletion] = []
+    full_series_deletions: list[FullSeriesDeletion] = []
+    season_cleanups: list[SeasonCleanup] = []
+
+    # Movies with a radarr_id become MovieDeletion entries
+    for m in filtered.movies:
+        if m.radarr_id is not None:
+            movie_deletions.append(MovieDeletion(
+                radarr_id=m.radarr_id,
+                title=m.title or "",
+                library_path=m.library_path or "",
+                size_bytes=m.size_bytes,
+            ))
+
+    # Series: compare eligible seasons against total on-disk seasons
+    for sg in filtered.series:
+        if sg.sonarr_series_id is None:
+            continue
+
+        # Only count seasons whose status matches the active categories
+        eligible = [sn for sn in sg.seasons if sn.status in categories] if categories else sg.seasons
+        filtered_season_numbers = sorted(sn.season_number for sn in eligible)
+
+        # Compare filtered seasons against the total on-disk seasons from Sonarr.
+        # If total_season_count is 0 (lookup missed), we cannot determine full vs partial,
+        # so fall back to treating it as a full deletion when there are seasons present.
+        total = sg.total_season_count
+        all_seasons_present = (
+            len(filtered_season_numbers) > 0
+            and (total == 0 or len(filtered_season_numbers) >= total)
+        )
+
+        if all_seasons_present:
+            full_series_deletions.append(FullSeriesDeletion(
+                sonarr_series_id=sg.sonarr_series_id,
+                title=sg.title,
+                library_path=sg.library_path or "",
+                size_bytes=sg.size_bytes,
+                season_count=sg.total_season_count,
+            ))
+        elif filtered_season_numbers:
+            episode_file_count = sum(
+                sn.total_episodes for sn in eligible
+            )
+            total_episode_count = sum(sn.total_episodes for sn in sg.seasons)
+            season_cleanups.append(SeasonCleanup(
+                sonarr_series_id=sg.sonarr_series_id,
+                title=sg.title,
+                library_path=sg.library_path or "",
+                season_numbers=filtered_season_numbers,
+                total_size_bytes=sg.size_bytes,
+                episode_file_count=episode_file_count,
+                total_season_count=sg.total_season_count,
+                total_episode_count=total_episode_count,
+            ))
+
+    total_size = (
+        sum(md.size_bytes for md in movie_deletions)
+        + sum(fs.size_bytes for fs in full_series_deletions)
+        + sum(sc.total_size_bytes for sc in season_cleanups)
+    )
+
+    return RunPlan(
+        movies=movie_deletions,
+        full_series=full_series_deletions,
+        season_cleanups=season_cleanups,
+        summary=RunPlanSummary(
+            movie_count=len(movie_deletions),
+            full_series_count=len(full_series_deletions),
+            season_cleanup_count=len(season_cleanups),
+            total_size=total_size,
+            total_size_fmt=_format_size(total_size),
         ),
     )

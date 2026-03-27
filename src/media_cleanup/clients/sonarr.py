@@ -130,6 +130,93 @@ class SonarrClient:
         return [s for s in series_list if keep_tag_id not in s.tags]
 
     # ------------------------------------------------------------------ #
+    #  Deletion + season management
+    # ------------------------------------------------------------------ #
+
+    def delete_series(self, series_id: int, delete_files: bool = True) -> None:
+        """Delete a series from Sonarr by its database ID.
+
+        Args:
+            series_id: Sonarr internal series ID.
+            delete_files: If True, also delete all files from disk.
+        """
+        res = requests.delete(
+            f'{self.root_url}/api/v3/series/{series_id}',
+            params={"deleteFiles": str(delete_files).lower()},
+            headers=self._header,
+        )
+        res.raise_for_status()
+
+    def get_episode_files(
+        self, series_id: int, season_number: int | None = None
+    ) -> list[EpisodeFileResource]:
+        """Fetch episode files for a series, optionally filtered by season.
+
+        Args:
+            series_id: Sonarr internal series ID.
+            season_number: If provided, only return files for this season.
+        """
+        res = requests.get(
+            f'{self.root_url}/api/v3/episodefile',
+            params={"seriesId": series_id},
+            headers=self._header,
+        )
+        res.raise_for_status()
+        files = _episode_file_list_adapter.validate_python(res.json())
+        if season_number is not None:
+            files = [f for f in files if f.season_number == season_number]
+        return files
+
+    def delete_episode_file(self, file_id: int) -> None:
+        """Delete a single episode file by its ID."""
+        res = requests.delete(
+            f'{self.root_url}/api/v3/episodefile/{file_id}',
+            headers=self._header,
+        )
+        res.raise_for_status()
+
+    def delete_episode_files_bulk(self, file_ids: list[int]) -> None:
+        """Delete multiple episode files in a single request.
+
+        More efficient than calling delete_episode_file for each file.
+        """
+        res = requests.delete(
+            f'{self.root_url}/api/v3/episodefile/bulk',
+            json={"episodeFileIds": file_ids},
+            headers=self._header,
+        )
+        res.raise_for_status()
+
+    def unmonitor_season(self, series_id: int, season_number: int) -> None:
+        """Set a season to unmonitored in Sonarr.
+
+        Fetches the full series object, flips the monitored flag on the
+        matching season, and PUTs the updated series back. Sonarr requires
+        the full series object for updates.
+        """
+        # Fetch the current series
+        res = requests.get(
+            f'{self.root_url}/api/v3/series/{series_id}',
+            headers=self._header,
+        )
+        res.raise_for_status()
+        series_data: dict = res.json()
+
+        # Find and update the matching season
+        for season in series_data.get("seasons", []):
+            if season.get("seasonNumber") == season_number:
+                season["monitored"] = False
+                break
+
+        # PUT the modified series back
+        res = requests.put(
+            f'{self.root_url}/api/v3/series/{series_id}',
+            json=series_data,
+            headers=self._header,
+        )
+        res.raise_for_status()
+
+    # ------------------------------------------------------------------ #
     #  Auth
     # ------------------------------------------------------------------ #
 

@@ -1,4 +1,4 @@
-import type { AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse } from '../types/api'
+import type { AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse, RunPlan } from '../types/api'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
@@ -84,5 +84,16 @@ export function useApi() {
     })
   }
 
-  return { postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults, filterAnalysis }
+  /**
+   * Build a dry-run deletion plan from a filtered analysis result.
+   * Returns which Radarr movies and Sonarr series/seasons would be deleted.
+   */
+  async function prepareRunPlan(jobId: string, req: FilterRequest): Promise<RunPlan> {
+    return request(`/api/analysis/${jobId}/prepare`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+    })
+  }
+
+  return { postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults, filterAnalysis, prepareRunPlan }
 }

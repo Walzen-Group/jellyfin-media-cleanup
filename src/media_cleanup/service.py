@@ -22,7 +22,7 @@ from media_cleanup.matching import (
 )
 from media_cleanup.schema.radarr_schema import Movie
 from media_cleanup.schema.sonarr_schema import Series
-from media_cleanup.types import EpisodeInfo, SeasonSummary
+from media_cleanup.types import EpisodeInfo, SeasonSummary, MatchMethod
 
 
 # Type aliases for optional hooks the caller can provide
@@ -276,8 +276,9 @@ class CleanupService:
                         episode_count=0,
                         size_on_disk=sonarr_season.statistics.size_on_disk,
                         matched_sonarr_path=path,
-                        match_method="synthetic",
+                        match_method=MatchMethod.SYNTHETIC,
                         is_unwatched=True,
+                        sonarr_series_id=sonarr.id,
                     )
                     if has_recent_sibling:
                         recent_matched.append(synthetic)

@@ -22,7 +22,7 @@ from rapidfuzz import fuzz, process
 from typing import Any, Callable, Optional
 from media_cleanup.schema.radarr_schema import Movie
 from media_cleanup.schema.sonarr_schema import Series
-from media_cleanup.types import EpisodeInfo, SeasonSummary
+from media_cleanup.types import EpisodeInfo, SeasonSummary, MatchMethod
 
 
 
@@ -79,6 +79,7 @@ class MatchResult:
     ambiguity_reason: Optional[str] = None
 
     size_on_disk: int = 0  # bytes, from Radarr
+    radarr_movie_id: Optional[int] = None  # Radarr movie ID for deletion API
 
     @property
     def is_matched(self) -> bool:
@@ -119,8 +120,9 @@ def match_movies_by_path(
                     jellyfin_path=jf_path,
                     matched_title=movie.title,
                     matched_path=movie.path,
-                    match_method="path",
+                    match_method=MatchMethod.PATH,
                     size_on_disk=movie.size_on_disk,
+                    radarr_movie_id=movie.id,
                 ))
                 found = True
                 break
@@ -251,6 +253,7 @@ def match_seasons_to_sonarr(
             season.matched_sonarr_path = path_match.path
             season.match_method = "path"
             season.size_on_disk = _get_season_size(path_match, season.season_number)
+            season.sonarr_series_id = path_match.id
             matched.append(season)
             cb("Matching seasons", i + 1, total)
             continue
@@ -284,6 +287,7 @@ def match_seasons_to_sonarr(
             season.fuzzy_score = best_score
             season.ambiguous_candidates = ambiguous
             season.size_on_disk = _get_season_size(sonarr_series[best_idx], season.season_number)
+            season.sonarr_series_id = sonarr_series[best_idx].id
             matched.append(season)
         else:
             unmatched.append(season)
@@ -475,11 +479,12 @@ def _fuzzy_match_paths(
             jellyfin_path=path,
             matched_title=best_title,
             matched_path=best_item.path,
-            match_method="fuzzy",
+            match_method=MatchMethod.FUZZY,
             score=best_score,
             ambiguous_candidates=ambiguous,
             ambiguity_reason=ambiguity_reason,
             size_on_disk=best_item.size_on_disk,
+            radarr_movie_id=best_item.id,
         ))
 
         cb(description, i + 1, total)

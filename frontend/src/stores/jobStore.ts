@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type {
   AnalysisRequest, FullJobResponse, JobResponse, WebSocketMessage,
-  MovieRow, SeriesRow, FilteredResult,
+  MovieRow, SeriesRow, FilteredResult, RunPlan,
 } from '../types/api'
 import { useApi } from '../composables/useApi'
 
@@ -19,6 +19,11 @@ export const useJobStore = defineStore('job', () => {
   const wizardStep = ref(1)
   const filteredResult = ref<FilteredResult | null>(null)
   const filterLoading = ref(false)
+  const runPlan = ref<RunPlan | null>(null)
+  const prepareLoading = ref(false)
+  const lastFilterCategories = ref<string[]>([])
+  const lastFilterGreedy = ref(false)
+  const mediaType = ref<'all' | 'movies' | 'series'>('all')
 
   const isAnalyzing = computed(() => {
     const s = currentJob.value?.status
@@ -69,21 +74,25 @@ export const useJobStore = defineStore('job', () => {
 
   /**
    * Filtered movies from the filter endpoint. Backend returns items with status already set,
-   * so no tagMovies transformation is needed — just pass through.
+   * so no tagMovies transformation is needed, just pass through.
+   * Returns empty when mediaType excludes movies.
    */
-  const filteredMovies = computed<MovieRow[]>(() =>
-    (filteredResult.value?.movies ?? []) as MovieRow[]
-  )
+  const filteredMovies = computed<MovieRow[]>(() => {
+    if (mediaType.value === 'series') return []
+    return (filteredResult.value?.movies ?? []) as MovieRow[]
+  })
 
   /**
    * Filtered series from the filter endpoint. Compute totalEpisodes the same way as allSeries.
+   * Returns empty when mediaType excludes series.
    */
-  const filteredSeries = computed<SeriesRow[]>(() =>
-    (filteredResult.value?.series ?? []).map(s => ({
+  const filteredSeries = computed<SeriesRow[]>(() => {
+    if (mediaType.value === 'movies') return []
+    return (filteredResult.value?.series ?? []).map(s => ({
       ...s,
       totalEpisodes: s.seasons.reduce((sum, sn) => sum + (sn.totalEpisodes || 0), 0),
     }))
-  )
+  })
 
   /**
    * Apply category/greedy filter to the current job's analysis result.
@@ -93,17 +102,36 @@ export const useJobStore = defineStore('job', () => {
     if (!currentJob.value?.jobId) return
     filterLoading.value = true
     try {
-      filteredResult.value = await api.filterAnalysis(currentJob.value.jobId, { categories, greedy })
+      filteredResult.value = await api.filterAnalysis(currentJob.value.jobId, { categories, greedy, mediaType: mediaType.value })
+      lastFilterCategories.value = [...categories]
+      lastFilterGreedy.value = greedy
     } finally {
       filterLoading.value = false
     }
   }
 
   /**
-   * Navigate the wizard stepper. Clears filtered result when going back to step 1.
+   * Build a dry-run deletion plan from the current filter state.
+   * Uses the same categories/greedy params that produced filteredResult.
+   */
+  async function prepareRunPlanAction(categories: string[], greedy: boolean) {
+    if (!currentJob.value?.jobId) return
+    prepareLoading.value = true
+    try {
+      runPlan.value = await api.prepareRunPlan(currentJob.value.jobId, { categories, greedy, mediaType: mediaType.value })
+    } finally {
+      prepareLoading.value = false
+    }
+  }
+
+  /**
+   * Navigate the wizard stepper. Clears downstream state when stepping back.
    */
   function setWizardStep(step: number) {
     wizardStep.value = step
+    if (step <= 2) {
+      runPlan.value = null
+    }
     if (step === 1) {
       filteredResult.value = null
     }
@@ -272,7 +300,13 @@ export const useJobStore = defineStore('job', () => {
     filterLoading,
     filteredMovies,
     filteredSeries,
+    runPlan,
+    prepareLoading,
+    lastFilterCategories,
+    lastFilterGreedy,
+    mediaType,
     applyFilter,
+    prepareRunPlan: prepareRunPlanAction,
     setWizardStep,
     startAnalysis,
     cancelCurrentJob,

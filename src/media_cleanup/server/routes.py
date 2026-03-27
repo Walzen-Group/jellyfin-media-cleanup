@@ -11,6 +11,8 @@ from media_cleanup.models import (
     FilterRequest,
     JobResponse,
     JobStatus,
+    RunPlan,
+    build_run_plan,
     filter_analysis_result,
 )
 from media_cleanup.server.jobs import Job, JobManager
@@ -93,8 +95,21 @@ def filter_analysis(job_id: str, request: FilterRequest) -> dict:
     if job.result is None:
         raise HTTPException(status_code=400, detail="Job has no result")
 
-    filtered = filter_analysis_result(job.result, request.categories, request.greedy)
+    filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type)
     return filtered.model_dump(by_alias=True)
+
+
+@router.post("/analysis/{job_id}/prepare", response_model=RunPlan)
+def prepare_run_plan(job_id: str, request: FilterRequest) -> RunPlan:
+    """Build a dry-run deletion plan from filtered analysis results."""
+    job = _manager().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.result is None:
+        raise HTTPException(status_code=400, detail="Job has no result")
+
+    filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type)
+    return build_run_plan(filtered, categories=request.categories)
 
 
 @router.delete("/analysis/{job_id}")

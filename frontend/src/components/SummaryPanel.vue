@@ -96,16 +96,16 @@ const rows: Row[] = [
     <div class="px-4 py-3">
       <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Summary</h2>
     </div>
-    <table class="w-full text-sm">
+    <table class="w-full text-xs sm:text-sm">
       <thead>
         <tr class="text-left text-xs font-medium text-surface-400 uppercase tracking-wider">
-          <th class="px-4 py-2"></th>
-          <th class="px-4 py-2 text-right">Movies</th>
-          <th class="px-4 py-2 text-right">Shows</th>
-          <th class="px-4 py-2 text-right">Seasons</th>
-          <th class="px-4 py-2 text-right">Movie Size</th>
-          <th class="px-4 py-2 text-right">Series Size</th>
-          <th class="px-4 py-2 text-right">Series Size (Greedy)</th>
+          <th class="px-2 sm:px-4 py-2"></th>
+          <th class="px-2 sm:px-4 py-2 text-right">Movies</th>
+          <th class="px-2 sm:px-4 py-2 text-right">Shows</th>
+          <th class="px-2 sm:px-4 py-2 text-right">Seasons</th>
+          <th class="px-2 sm:px-4 py-2 text-right">Movie Size</th>
+          <th class="px-2 sm:px-4 py-2 text-right">Series Size</th>
+          <th class="px-2 sm:px-4 py-2 text-right">Series Size (Greedy)</th>
         </tr>
       </thead>
       <tbody>
@@ -116,13 +116,13 @@ const rows: Row[] = [
             </td>
           </tr>
           <tr v-else>
-            <td class="px-4 py-2 text-surface-300 dark:text-surface-500 font-medium">{{ row.label }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.movies ?? '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.shows ?? '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seasons ?? '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.movieSize ?? '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seriesSize ?? '' }}</td>
-            <td class="px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seriesSizeGreedy ?? '' }}</td>
+            <td class="px-2 sm:px-4 py-2 text-surface-300 dark:text-surface-500 font-medium whitespace-nowrap">{{ row.label }}</td>
+            <td class="px-2 sm:px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.movies ?? '' }}</td>
+            <td class="px-2 sm:px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.shows ?? '' }}</td>
+            <td class="px-2 sm:px-4 py-2 text-right tabular-nums" :class="row.cls">{{ row.seasons ?? '' }}</td>
+            <td class="px-2 sm:px-4 py-2 text-right tabular-nums whitespace-nowrap" :class="row.cls">{{ row.movieSize ?? '' }}</td>
+            <td class="px-2 sm:px-4 py-2 text-right tabular-nums whitespace-nowrap" :class="row.cls">{{ row.seriesSize ?? '' }}</td>
+            <td class="px-2 sm:px-4 py-2 text-right tabular-nums whitespace-nowrap" :class="row.cls">{{ row.seriesSizeGreedy ?? '' }}</td>
           </tr>
         </template>
       </tbody>

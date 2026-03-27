@@ -66,8 +66,8 @@ async function runAnalysis() {
 </script>
 
 <template>
-  <div class="card p-5 space-y-4">
-    <div class="flex flex-wrap items-end gap-4">
+  <div class="card p-3 sm:p-5 space-y-4">
+    <div class="flex flex-wrap items-end gap-3 sm:gap-4">
       <div>
         <label class="block text-xs font-medium text-surface-500 mb-1.5 uppercase tracking-wide">Mode</label>
         <Select

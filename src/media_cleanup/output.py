@@ -114,6 +114,8 @@ def _format_movie_list(matches: list[MatchResult]) -> list[dict[str, Any]]:
             entry["fuzzy_score"] = round(m.score, 1)
         if m.size_on_disk:
             entry["size_gb"] = round(m.size_on_disk / (1024 ** 3), 2)
+        if m.radarr_movie_id is not None:
+            entry["radarr_id"] = m.radarr_movie_id
         items.append(entry)
     return items
 
@@ -149,6 +151,14 @@ def _format_season_list(seasons: list[SeasonSummary]) -> list[dict[str, Any]]:
             entry["match_method"] = first.match_method
         if first.fuzzy_score is not None:
             entry["fuzzy_score"] = round(first.fuzzy_score, 1)
+
+        # Include Sonarr series ID if available (from any season in the group)
+        sonarr_id = next(
+            (s.sonarr_series_id for s in season_list if s.sonarr_series_id is not None),
+            None,
+        )
+        if sonarr_id is not None:
+            entry["sonarr_series_id"] = sonarr_id
 
         total_size = sum(s.size_on_disk for s in season_list)
         if total_size:

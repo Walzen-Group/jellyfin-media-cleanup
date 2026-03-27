@@ -27,16 +27,31 @@ const vibes = [
   'boingzoinging...',
   'seesawing...',
   'humpteedumpting...',
+  'flubbergusting...',
 ]
 
-const currentVibe = ref(vibes[0])
+// Shuffle the array each time the component mounts (each analysis run)
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+let shuffled = shuffle(vibes)
+const currentVibe = ref(shuffled[0])
 let vibeIndex = 0
 let timer: ReturnType<typeof setInterval>
 
 onMounted(() => {
+  shuffled = shuffle(vibes)
+  vibeIndex = 0
+  currentVibe.value = shuffled[0]
   timer = setInterval(() => {
-    vibeIndex = (vibeIndex + 1) % vibes.length
-    currentVibe.value = vibes[vibeIndex]
+    vibeIndex = (vibeIndex + 1) % shuffled.length
+    currentVibe.value = shuffled[vibeIndex]
   }, 3000)
 })
 
@@ -45,13 +60,13 @@ onUnmounted(() => clearInterval(timer))
 
 <template>
   <div class="space-y-1.5">
-    <div class="flex justify-between text-sm text-surface-500">
-      <span>
+    <div class="flex flex-wrap justify-between text-xs sm:text-sm text-surface-500 gap-x-2">
+      <span class="min-w-0 truncate">
         <!-- Split step name on first ':' to separate main step from subtext (e.g. "Matching movies" from "42/100") -->
         {{ step.split(':')[0] }}
         <span v-if="step.includes(':')" class="text-surface-400">: {{ step.split(':').slice(1).join(':').trim() }}</span>
       </span>
-      <span class="tabular-nums">
+      <span class="tabular-nums shrink-0">
         {{ Math.round(percent) }}%
         <!-- Show pipeline progress (e.g. "3/8") only if both step index and total are provided -->
         <span v-if="stepIndex && totalSteps" class="text-surface-400 ml-1.5">({{ stepIndex }}/{{ totalSteps }})</span>

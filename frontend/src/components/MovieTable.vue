@@ -85,12 +85,12 @@ const filteredCount = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-3 overflow-x-auto">
     <div class="flex flex-wrap items-center gap-3">
       <InputText
         v-model="(filters.global as any).value"
         placeholder="Search movies..."
-        class="!text-sm"
+        class="!text-sm w-72"
       />
       <span class="text-sm text-surface-500 ml-auto">
         {{ filteredCount }} of {{ movies.length }} movies

@@ -12,7 +12,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="card px-5 py-3 flex items-center gap-2 text-sm text-surface-500">
+  <div class="card px-3 sm:px-5 py-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-surface-500">
     <span class="font-medium text-surface-700 dark:text-surface-200">{{ summary.movieCount.toLocaleString() }}</span>
     / {{ summary.totalMovieCount.toLocaleString() }} movies
     <span class="text-surface-300">&middot;</span>

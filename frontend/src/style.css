@@ -37,6 +37,12 @@
   box-shadow: none;
 }
 
+/* Make Stepper panels transparent so cards render against the page background */
+[data-pc-name="steppanels"],
+[data-pc-name="steppanel"] {
+  background: transparent !important;
+}
+
 /* Slightly more space between filter dropdown and buttons */
 [data-pc-section="filterbuttonbar"] {
   padding-top: 0.5rem !important;

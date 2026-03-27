@@ -19,7 +19,7 @@ const gitHash = __GIT_HASH__
 
 <template>
   <div class="min-h-screen bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-0 transition-colors text-[15px]">
-    <header class="px-6 py-3.5 flex items-center justify-between bg-indigo-500/90 dark:bg-indigo-900 text-white">
+    <header class="px-3 sm:px-6 py-3.5 flex items-center justify-between bg-indigo-500/90 dark:bg-indigo-900 text-white">
       <h1 class="flex items-center gap-2.5 text-lg font-semibold tracking-wide">
         <svg width="20" height="18" viewBox="0 0 20 18" fill="currentColor" class="shrink-0 opacity-90 -mb-0.5">
           <rect x="3" y="0" width="14" height="6" rx="1.5" />
@@ -30,9 +30,9 @@ const gitHash = __GIT_HASH__
         </svg>
         Wedia Cleanup
       </h1>
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 sm:gap-4">
         <ThemeToggle />
-        <span class="text-xs text-indigo-300/60 font-mono">{{ gitHash }}</span>
+        <span class="text-xs text-indigo-300/75 font-mono hidden sm:inline">{{ gitHash }}</span>
         <div class="flex items-center gap-2 text-sm text-indigo-200">
           <span
             class="inline-block w-2 h-2 rounded-full"
@@ -42,7 +42,7 @@ const gitHash = __GIT_HASH__
         </div>
       </div>
     </header>
-    <main class="mx-auto px-6 py-6 w-[90%]">
+    <main class="mx-auto px-2 sm:px-6 py-4 sm:py-6 w-full sm:w-[90%]">
       <DashboardView />
     </main>
   </div>
