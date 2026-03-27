@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable
 
-from media_cleanup.cleanup_executor import CleanupCancelledError, CleanupExecutor
+from media_cleanup.cleanup_executor import CleanupExecutor
 from media_cleanup.config import AppConfig
 from media_cleanup.database import Database
-from media_cleanup.models import CleanupJobResponse, CleanupReport, JobStatus, RunPlan
+from media_cleanup.models import CleanupReport, JobStatus, RunPlan
 from media_cleanup.types import CleanupEntryStatus
 
 logger = logging.getLogger(__name__)
