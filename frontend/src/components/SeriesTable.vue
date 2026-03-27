@@ -54,7 +54,7 @@ const statusColors: Record<MediaStatus, string> = {
   unmatched: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
   never: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   never_new: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
-  collision: 'bg-fuchsia-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  collision: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
 }
 
 /**
@@ -190,7 +190,7 @@ const filteredCount = computed(() => {
               <template #body="{ data: s }">
                 <span
                   class="inline-block w-2.5 h-2.5 rounded-full"
-                  :class="s.status === 'recent' ? 'bg-emerald-400/70 dark:bg-emerald-400/60' : s.status === 'old' ? 'bg-rose-400/70 dark:bg-rose-400/60' : s.status === 'kept' ? 'bg-amber-400/70 dark:bg-amber-400/60' : s.status === 'collision' ? 'bg-fuchsia-400/70 dark:bg-fuchsia-400/60' : 'bg-surface-300 dark:bg-surface-600'"
+                  :class="s.status === 'recent' ? 'bg-emerald-400/70 dark:bg-emerald-400/60' : s.status === 'old' ? 'bg-rose-400/70 dark:bg-rose-400/60' : s.status === 'kept' ? 'bg-amber-400/70 dark:bg-amber-400/60' : s.status === 'collision' ? 'bg-orange-400/70 dark:bg-orange-400/60' : 'bg-surface-300 dark:bg-surface-600'"
                 />
               </template>
             </Column>
@@ -220,12 +220,12 @@ const filteredCount = computed(() => {
             </Column>
           </DataTable>
           <!-- Collision info: displayed when multiple Jellyfin series names mapped to the same library path -->
-          <div v-if="data.collidingNames?.length" class="mt-2 px-3 py-2 rounded bg-fuchsia-50 dark:bg-fuchsia-950/30 border border-fuchsia-200 dark:border-fuchsia-800">
-            <span class="text-xs font-medium text-fuchsia-700 dark:text-fuchsia-300">Collision: </span>
-            <span class="text-xs text-fuchsia-600 dark:text-fuchsia-400">
+          <div v-if="data.collidingNames?.length" class="mt-2 px-3 py-2 rounded bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+            <span class="text-xs font-medium text-orange-700 dark:text-orange-300">Collision: </span>
+            <span class="text-xs text-orange-600 dark:text-orange-400">
               Multiple Jellyfin names matched this library entry:
             </span>
-            <ul class="mt-1 list-disc list-inside text-xs text-fuchsia-600 dark:text-fuchsia-400 font-mono">
+            <ul class="mt-1 list-disc list-inside text-xs text-orange-600 dark:text-orange-400 font-mono">
               <li v-for="name in data.collidingNames" :key="name">{{ name }}</li>
             </ul>
           </div>

@@ -338,10 +338,10 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
     # Never-watched items -- split by added date
     all_movie_matches = result.recent_movie_matches + result.old_movie_matches
     watched_movie_paths = {
-        m.matched_path for m in all_movie_matches + result.kept_movie_matches if m.matched_path
+        m.matched_path for m in all_movie_matches + result.kept_movie_matches + result.collision_movie_matches if m.matched_path
     }
     all_season_matches = (
-        result.recent_seasons_matched + result.old_seasons_matched + result.kept_season_matches
+        result.recent_seasons_matched + result.old_seasons_matched + result.kept_season_matches + result.collision_season_matches
     )
     watched_series_paths = {
         s.matched_sonarr_path for s in all_season_matches if s.matched_sonarr_path
@@ -663,7 +663,7 @@ def cleanup_result_to_response(
 ) -> AnalysisResult:
     """Convert a CleanupResult into the API AnalysisResult model."""
     # Movies -- split by category, never-watched split by added date
-    all_matches = result.recent_movie_matches + result.old_movie_matches + result.kept_movie_matches
+    all_matches = result.recent_movie_matches + result.old_movie_matches + result.kept_movie_matches + result.collision_movie_matches
     watched_movie_paths = {m.matched_path for m in all_matches if m.matched_path}
     never_movies: list[MovieMatch] = []
     never_new_movies: list[MovieMatch] = []

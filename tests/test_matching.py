@@ -190,3 +190,97 @@ def test_ampersand_vs_and_groups_episodes():
     # Should produce ONE season, not two
     assert len(all_seasons) == 1
     assert all_seasons[0].episode_count == 2
+
+
+# ------------------------------------------------------------------ #
+#  Collision prevention: exact match trumps loose match
+# ------------------------------------------------------------------ #
+
+def test_exact_match_prevents_loose_collision():
+    """
+    'The Office (US)' should match Sonarr's 'The Office (US)' exactly.
+    'The Office' should NOT also match via word-boundary/fuzzy, since
+    a more specific name already claimed that Sonarr entry.
+    """
+    sonarr = [_series("The Office (US)")]
+    seasons = [
+        _season("The Office (US)"),   # exact match
+        _season("The Office"),        # should NOT match (would cause collision)
+    ]
+
+    matched, unmatched = match_seasons_to_sonarr(seasons, sonarr)
+
+    matched_names = {s.series_name for s in matched}
+    unmatched_names = {s.series_name for s in unmatched}
+
+    assert "The Office (US)" in matched_names
+    assert "The Office" in unmatched_names
+
+
+def test_both_exact_matches_no_collision():
+    """
+    When Sonarr has both 'The Office' and 'The Office (US)', each
+    Jellyfin name should match its exact counterpart -- no collision.
+    """
+    sonarr = [_series("The Office"), _series("The Office (US)")]
+    seasons = [
+        _season("The Office"),
+        _season("The Office (US)"),
+    ]
+
+    matched, unmatched = match_seasons_to_sonarr(seasons, sonarr)
+
+    assert len(matched) == 2
+    assert len(unmatched) == 0
+
+    office = next(s for s in matched if s.series_name == "The Office")
+    office_us = next(s for s in matched if s.series_name == "The Office (US)")
+    assert office.matched_sonarr_path == "/tv/The Office"
+    assert office_us.matched_sonarr_path == "/tv/The Office (US)"
+
+
+def test_loose_match_kept_when_no_exact_competitor():
+    """
+    When only 'The Office' exists in Jellyfin (no 'The Office (US)'),
+    it should still match Sonarr's 'The Office (US)' via loose matching.
+    """
+    sonarr = [_series("The Office (US)")]
+    seasons = [_season("The Office")]
+
+    matched, unmatched = match_seasons_to_sonarr(seasons, sonarr)
+
+    assert len(matched) == 1
+    assert matched[0].series_name == "The Office"
+    assert matched[0].matched_sonarr_path == "/tv/The Office (US)"
+
+
+def test_cross_list_dedup_prevents_collision():
+    """
+    Simulates the service-level scenario: 'The Office (US)' is in one
+    match_seasons_to_sonarr call (recent) and 'The Office' is in another
+    (old). The cross-list _deduplicate_matches in service.py handles this,
+    but we test the underlying function directly here.
+    """
+    from media_cleanup.matching import _deduplicate_matches
+
+    sonarr = [_series("The Office (US)")]
+
+    # Simulate: "The Office (US)" matched in recent call, "The Office" matched in old call
+    recent_season = _season("The Office (US)")
+    recent_season.matched_sonarr_path = "/tv/The Office (US)"
+    recent_season.match_method = "path"
+
+    old_season = _season("The Office")
+    old_season.matched_sonarr_path = "/tv/The Office (US)"
+    old_season.match_method = "path"
+
+    combined = [recent_season, old_season]
+    unmatched: list[SeasonSummary] = []
+
+    new_matched, new_unmatched = _deduplicate_matches(combined, unmatched, sonarr)
+
+    matched_names = {s.series_name for s in new_matched}
+    unmatched_names = {s.series_name for s in new_unmatched}
+
+    assert "The Office (US)" in matched_names, "exact match should be kept"
+    assert "The Office" in unmatched_names, "weaker match should be demoted"

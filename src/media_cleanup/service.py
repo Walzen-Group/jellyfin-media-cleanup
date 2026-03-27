@@ -19,6 +19,7 @@ from media_cleanup.matching import (
     fuzzy_match_movies,
     build_season_summaries,
     match_seasons_to_sonarr,
+    _deduplicate_matches,
 )
 from media_cleanup.schema.radarr_schema import Movie
 from media_cleanup.schema.sonarr_schema import Series
@@ -175,14 +176,15 @@ class CleanupService:
             )
             collision_movie_paths = {p for p, c in path_counts.items() if c > 1}
 
-            result.collision_movie_matches = [
-                m for m in recent_movie_matches + old_movie_matches
-                if m.matched_path in collision_movie_paths
-            ]
+            # Keep tags take priority over collisions
             result.kept_movie_matches = [
                 m for m in recent_movie_matches + old_movie_matches
                 if m.matched_path in kept_movie_paths
-                and m.matched_path not in collision_movie_paths
+            ]
+            result.collision_movie_matches = [
+                m for m in recent_movie_matches + old_movie_matches
+                if m.matched_path in collision_movie_paths
+                and m.matched_path not in kept_movie_paths
             ]
             exclude_movie_paths = kept_movie_paths | collision_movie_paths
             result.recent_movie_matches = [
@@ -285,6 +287,24 @@ class CleanupService:
                     else:
                         old_matched.append(synthetic)
 
+            # Cross-list deduplication: when "The Office" is in recent and
+            # "The Office (US)" is in old (or vice versa), within-list dedup
+            # misses it. Combine, dedup, then split back by tagging origin.
+            recent_set = set(id(s) for s in recent_matched)
+            combined_matched = recent_matched + old_matched
+            combined_unmatched: list[SeasonSummary] = []
+            combined_matched, combined_unmatched = _deduplicate_matches(
+                combined_matched, combined_unmatched, result.all_series
+            )
+            recent_matched = [s for s in combined_matched if id(s) in recent_set]
+            old_matched = [s for s in combined_matched if id(s) not in recent_set]
+            # Demoted items go to the unmatched list for whichever bucket they came from
+            for s in combined_unmatched:
+                if id(s) in recent_set:
+                    recent_unmatched.append(s)
+                else:
+                    old_unmatched.append(s)
+
             # Detect series collisions: different series names -> same Sonarr path
             path_to_names: dict[str, set[str]] = defaultdict(set)
             for s in recent_matched + old_matched:
@@ -292,16 +312,17 @@ class CleanupService:
                     path_to_names[s.matched_sonarr_path].add(s.series_name)
             collision_series_paths = {p for p, names in path_to_names.items() if len(names) > 1}
 
-            result.collision_season_matches = [
-                s for s in recent_matched + old_matched
-                if s.matched_sonarr_path in collision_series_paths
-            ]
-            exclude_series_paths = kept_series_paths | collision_series_paths
+            # Keep tags take priority over collisions
             result.kept_season_matches = [
                 s for s in recent_matched + old_matched
                 if s.matched_sonarr_path in kept_series_paths
-                and s.matched_sonarr_path not in collision_series_paths
             ]
+            result.collision_season_matches = [
+                s for s in recent_matched + old_matched
+                if s.matched_sonarr_path in collision_series_paths
+                and s.matched_sonarr_path not in kept_series_paths
+            ]
+            exclude_series_paths = kept_series_paths | collision_series_paths
             result.recent_seasons_matched = [
                 s for s in recent_matched
                 if s.matched_sonarr_path not in exclude_series_paths

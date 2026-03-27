@@ -85,7 +85,7 @@ const rows: Row[] = [
     label: 'Collision',
     movies: n(props.summary.matching.collisionMovieCount),
     seasons: n(props.summary.matching.collisionSeasonCount),
-    cls: 'text-fuchsia-500 dark:text-fuchsia-400',
+    cls: 'text-orange-500 dark:text-orange-400',
   },
   matchRow('Unmatched', 'unmatchedMovieCount', 'unmatchedShowsCount', 'unmatchedSeasonsCount', 'text-red-500 dark:text-red-400'),
 ]

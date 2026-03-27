@@ -109,7 +109,7 @@ def _format_movie_list(matches: list[MatchResult]) -> list[dict[str, Any]]:
         if m.matched_path:
             entry["library_path"] = m.matched_path
         if m.match_method:
-            entry["match_method"] = m.match_method
+            entry["match_method"] = str(m.match_method)
         if m.score is not None:
             entry["fuzzy_score"] = round(m.score, 1)
         if m.size_on_disk:
@@ -148,7 +148,7 @@ def _format_season_list(seasons: list[SeasonSummary]) -> list[dict[str, Any]]:
         if first.matched_sonarr_path:
             entry["library_path"] = first.matched_sonarr_path
         if first.match_method:
-            entry["match_method"] = first.match_method
+            entry["match_method"] = str(first.match_method)
         if first.fuzzy_score is not None:
             entry["fuzzy_score"] = round(first.fuzzy_score, 1)
 

@@ -294,7 +294,95 @@ def match_seasons_to_sonarr(
 
         cb("Matching seasons", i + 1, total)
 
+    # Collision prevention: when multiple distinct Jellyfin names matched
+    # the same Sonarr path, keep only the best match and unmatch the rest.
+    # E.g. "The Office (US)" exact-matches Sonarr, but "The Office" also
+    # matches via word-boundary -- the exact match should win.
+    matched, unmatched = _deduplicate_matches(matched, unmatched, sonarr_series)
+
     return matched, unmatched
+
+
+def _match_strength(season: SeasonSummary, sonarr_series: list[Series]) -> int:
+    """
+    Rate how strong a season's match is to its Sonarr entry.
+
+    Higher = stronger:
+      3 = exact normalized title match
+      2 = year-stripped match (path method, not exact)
+      1 = word-boundary or other path match
+      0 = fuzzy match
+    """
+    if season.match_method == MatchMethod.FUZZY:
+        return 0
+    # For path matches, check if it was an exact normalized match
+    name_norm = normalize_title(season.series_name)
+    for s in sonarr_series:
+        if s.path == season.matched_sonarr_path:
+            if normalize_title(s.title) == name_norm:
+                return 3  # exact
+            name_base = normalize_title(_strip_year(season.series_name))
+            title_base = normalize_title(_strip_year(s.title))
+            if name_base == title_base:
+                return 2  # year-stripped
+            return 1  # word-boundary / containment
+    return 0
+
+
+def _deduplicate_matches(
+    matched: list[SeasonSummary],
+    unmatched: list[SeasonSummary],
+    sonarr_series: list[Series],
+) -> tuple[list[SeasonSummary], list[SeasonSummary]]:
+    """
+    When multiple distinct Jellyfin names matched the same Sonarr path,
+    keep only the strongest match and demote the rest to unmatched.
+    """
+    from collections import defaultdict
+
+    # Group by Sonarr path
+    path_groups: dict[str, list[SeasonSummary]] = defaultdict(list)
+    for s in matched:
+        if s.matched_sonarr_path:
+            path_groups[s.matched_sonarr_path].append(s)
+
+    demote: set[int] = set()  # ids of seasons to unmatch
+    for path, seasons in path_groups.items():
+        distinct_names = {s.series_name for s in seasons}
+        if len(distinct_names) <= 1:
+            continue  # no collision risk
+
+        # Find the best strength among all names for this path
+        name_strengths: dict[str, int] = {}
+        for s in seasons:
+            strength = _match_strength(s, sonarr_series)
+            if s.series_name not in name_strengths or strength > name_strengths[s.series_name]:
+                name_strengths[s.series_name] = strength
+
+        best_strength = max(name_strengths.values())
+
+        # Demote all seasons whose name has a weaker match strength
+        for s in seasons:
+            if name_strengths[s.series_name] < best_strength:
+                demote.add(id(s))
+
+    if not demote:
+        return matched, unmatched
+
+    new_matched = []
+    for s in matched:
+        if id(s) in demote:
+            # Clear match data before moving to unmatched
+            s.matched_sonarr_path = None
+            s.match_method = None
+            s.fuzzy_score = None
+            s.size_on_disk = 0
+            s.sonarr_series_id = None
+            unmatched.append(s)
+        else:
+            new_matched.append(s)
+
+    return new_matched, unmatched
 
 
 def _get_season_size(series: Series, season_number: int) -> int:

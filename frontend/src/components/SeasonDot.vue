@@ -25,7 +25,7 @@ const colorMap: Record<string, string> = {
   unmatched: 'bg-surface-300 dark:bg-surface-600',
   never: 'bg-purple-400/70 dark:bg-purple-400/60',
   never_new: 'bg-cyan-400/70 dark:bg-cyan-400/60',
-  collision: 'bg-fuchsia-400/70 dark:bg-fuchsia-400/60',
+  collision: 'bg-orange-400/70 dark:bg-orange-400/60',
 }
 </script>
 
