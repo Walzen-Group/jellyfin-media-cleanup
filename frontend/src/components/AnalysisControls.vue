@@ -3,6 +3,7 @@ import { ref, inject, type Ref } from 'vue'
 import { useJobStore } from '../stores/jobStore'
 import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
+import ToggleSwitch from 'primevue/toggleswitch'
 import Button from 'primevue/button'
 import ProgressBar from './ProgressBar.vue'
 import type { AnalysisRequest } from '../types/api'
@@ -21,6 +22,7 @@ const modeOptions = [
 const mode = ref<AnalysisRequest['mode']>('all')
 const monthThreshold = ref('24')      // Items not watched in N months are cleanup candidates
 const addedThreshold = ref('12')      // Never-watched items added within N months are marked "new" (not deleted)
+const preciseMatching = ref(true)     // Resolve all episodes for multi-library path matching
 const submitting = ref(false)         // True while the API call is in flight
 const cancelling = ref(false)         // True while the cancel request is in flight
 
@@ -58,6 +60,7 @@ async function runAnalysis() {
       mode: mode.value,
       monthThreshold: Number(monthThreshold.value) || 24,
       addedThreshold: Number(addedThreshold.value) || 12,
+      preciseMatching: preciseMatching.value,
     })
   } finally {
     submitting.value = false
@@ -98,6 +101,16 @@ async function runAnalysis() {
         <div class="flex items-center gap-1.5">
           <InputText v-model="addedThreshold" type="number" class="w-20" />
           <span class="text-xs text-surface-400">months</span>
+        </div>
+      </div>
+
+      <div class="self-stretch flex flex-col">
+        <label class="flex items-center gap-1.5 text-xs font-medium text-surface-500 mb-1.5 uppercase tracking-wide">
+          Precise matching
+          <i class="pi pi-info-circle text-surface-400 cursor-help" v-tooltip="'Resolves all episodes for path matching instead of one per show. Slower, but correctly handles the same series in multiple Jellyfin libraries.'" />
+        </label>
+        <div class="flex-1 flex items-center">
+          <ToggleSwitch v-model="preciseMatching" />
         </div>
       </div>
 

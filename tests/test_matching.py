@@ -3,7 +3,7 @@
 import pytest
 
 from media_cleanup.matching import (
-    _path_match_season,
+    _title_match_season,
     _pick_by_watch_date,
     _length_ratio,
     _strip_year,
@@ -31,14 +31,14 @@ def _season(name: str, last_played: str = "2025-06-01 12:00:00") -> SeasonSummar
 
 def test_exact_match():
     sonarr = [_series("Billions")]
-    result = _path_match_season(_season("Billions"), sonarr)
+    result = _title_match_season(_season("Billions"), sonarr)
     assert result is not None
     assert result.title == "Billions"
 
 
 def test_exact_match_case_insensitive():
     sonarr = [_series("billions")]
-    result = _path_match_season(_season("Billions"), sonarr)
+    result = _title_match_season(_season("Billions"), sonarr)
     assert result is not None
 
 
@@ -49,7 +49,7 @@ def test_exact_match_case_insensitive():
 def test_year_stripped_single_candidate():
     """'Dark Matter' matches 'Dark Matter (2024)' when it's the only option."""
     sonarr = [_series("Dark Matter (2024)")]
-    result = _path_match_season(_season("Dark Matter"), sonarr)
+    result = _title_match_season(_season("Dark Matter"), sonarr)
     assert result is not None
     assert result.title == "Dark Matter (2024)"
 
@@ -57,7 +57,7 @@ def test_year_stripped_single_candidate():
 def test_year_stripped_prefers_exact_over_stripped():
     """If both 'Foo' and 'Foo (2024)' exist, 'Foo' matches 'Foo' exactly."""
     sonarr = [_series("Foo (2024)"), _series("Foo")]
-    result = _path_match_season(_season("Foo"), sonarr)
+    result = _title_match_season(_season("Foo"), sonarr)
     assert result is not None
     assert result.title == "Foo"
 
@@ -69,7 +69,7 @@ def test_year_stripped_prefers_exact_over_stripped():
 def test_pick_by_watch_date_picks_older():
     """Watched in 2025 -> picks (2024), not (2026)."""
     sonarr = [_series("Dark Matter (2024)"), _series("Dark Matter (2026)")]
-    result = _path_match_season(_season("Dark Matter", last_played="2025-06-01 12:00:00"), sonarr)
+    result = _title_match_season(_season("Dark Matter", last_played="2025-06-01 12:00:00"), sonarr)
     assert result is not None
     assert result.title == "Dark Matter (2024)"
 
@@ -77,7 +77,7 @@ def test_pick_by_watch_date_picks_older():
 def test_pick_by_watch_date_picks_newer_when_after():
     """Watched in 2027 -> picks (2026) as the most recent year <= watch year."""
     sonarr = [_series("Dark Matter (2024)"), _series("Dark Matter (2026)")]
-    result = _path_match_season(_season("Dark Matter", last_played="2027-01-15 20:00:00"), sonarr)
+    result = _title_match_season(_season("Dark Matter", last_played="2027-01-15 20:00:00"), sonarr)
     assert result is not None
     assert result.title == "Dark Matter (2026)"
 
@@ -85,7 +85,7 @@ def test_pick_by_watch_date_picks_newer_when_after():
 def test_pick_by_watch_date_all_newer_picks_earliest():
     """Watched in 2020 but both series are newer -> picks earliest (2024)."""
     sonarr = [_series("Dark Matter (2026)"), _series("Dark Matter (2024)")]
-    result = _path_match_season(_season("Dark Matter", last_played="2020-01-01 00:00:00"), sonarr)
+    result = _title_match_season(_season("Dark Matter", last_played="2020-01-01 00:00:00"), sonarr)
     assert result is not None
     assert result.title == "Dark Matter (2024)"
 
@@ -97,14 +97,14 @@ def test_pick_by_watch_date_all_newer_picks_earliest():
 def test_short_title_does_not_match_long_name():
     """'House' must NOT match 'House of Guinness' (ratio 5/17 = 0.29)."""
     sonarr = [_series("House")]
-    result = _path_match_season(_season("House of Guinness"), sonarr)
+    result = _title_match_season(_season("House of Guinness"), sonarr)
     assert result is None
 
 
 def test_similar_length_word_boundary_matches():
     """'The Office' matches 'The Office US' (ratio 10/13 = 0.77, above threshold)."""
     sonarr = [_series("The Office")]
-    result = _path_match_season(_season("The Office US"), sonarr)
+    result = _title_match_season(_season("The Office US"), sonarr)
     assert result is not None
     assert result.title == "The Office"
 
@@ -173,7 +173,7 @@ def test_normalize_title():
 def test_ampersand_vs_and_matches():
     """'Fionna & Cake' matches 'Fionna and Cake' in Sonarr via normalization."""
     sonarr = [_series("Adventure Time: Fionna and Cake")]
-    result = _path_match_season(_season("Adventure Time: Fionna & Cake"), sonarr)
+    result = _title_match_season(_season("Adventure Time: Fionna & Cake"), sonarr)
     assert result is not None
 
 
@@ -181,9 +181,9 @@ def test_ampersand_vs_and_groups_episodes():
     """Episodes with '&' and 'and' variants merge into one season."""
     episodes = [
         EpisodeInfo(item_id="1", series_name="Fionna & Cake", season_number=1,
-                    file_path="", last_played="2025-01-01 12:00:00"),
+last_played="2025-01-01 12:00:00"),
         EpisodeInfo(item_id="2", series_name="Fionna and Cake", season_number=1,
-                    file_path="", last_played="2025-06-01 12:00:00"),
+last_played="2025-06-01 12:00:00"),
     ]
     recent, old = build_season_summaries(episodes, month_threshold=12)
     all_seasons = recent + old

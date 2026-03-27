@@ -57,15 +57,14 @@ def test_billions_matched_from_jellyfin_to_sonarr():
     episode_dates = jellyfin.get_all_watched_episode_dates()
     assert len(episode_dates) > 0, "No episodes found in Jellyfin playback history"
 
-    # Step 2: Resolve episode metadata (API + fallback for stale IDs)
-    episodes = jellyfin.get_episode_metadata(episode_dates)
-    assert len(episodes) > 0, "No episodes could be resolved"
+    # Step 2: Parse episode names from PlaybackActivity (no HTTP)
+    episodes = jellyfin.parse_episode_dates(episode_dates)
+    assert len(episodes) > 0, "No episodes could be parsed"
 
-    # Verify Billions episodes exist somewhere in the resolved data
+    # Verify Billions episodes exist somewhere in the parsed data
     billions_episodes = [ep for ep in episodes if "Billions" in ep.series_name]
     assert len(billions_episodes) > 0, (
-        "Billions not found in resolved episodes — "
-        "neither API resolution nor ItemName fallback produced any results"
+        "Billions not found in parsed episodes"
     )
 
     # Step 3: Build season summaries

@@ -186,7 +186,7 @@ class JobManager:
         if mode in ("all", "movies"):
             _step_names += ["Querying Jellyfin movie history", "Resolving movie paths", "Fetching Radarr library", "Matching movies"]
         if mode in ("all", "series"):
-            _step_names += ["Querying Jellyfin episode history", "Resolving episodes", "Fetching Sonarr library", "Matching seasons"]
+            _step_names += ["Querying Jellyfin episode history", "Parsing episode names", "Resolving show paths", "Fetching Sonarr library", "Matching seasons"]
         _total_steps = len(_step_names)
 
         def progress_cb(step: str, current: int, total: int) -> None:
@@ -230,6 +230,7 @@ class JobManager:
             cleanup_result = service.run_analysis(
                 mode=job.request.mode,
                 month_threshold=job.request.month_threshold,
+                precise_matching=job.request.precise_matching,
                 progress_callback=progress_cb,
                 cancel_check=cancel_ck,
             )

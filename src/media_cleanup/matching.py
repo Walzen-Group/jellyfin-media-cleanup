@@ -224,18 +224,30 @@ def build_season_summaries(
 def match_seasons_to_sonarr(
     seasons: list[SeasonSummary],
     sonarr_series: list[Series],
+    show_paths: dict[str, list[str]] | None = None,
     progress_callback: ProgressCallback | None = None,
 ) -> tuple[list[SeasonSummary], list[SeasonSummary]]:
     """
     Enrich SeasonSummary objects with Sonarr path data by matching
-    series_name against Sonarr series paths (path prefix) or titles (fuzzy).
+    against Sonarr series using:
+      1. File path prefix matching (if show_paths provided from Jellyfin API)
+      2. Title matching (exact, year-stripped, word-boundary)
+      3. Fuzzy title matching (rapidfuzz fallback)
+
+    Args:
+        show_paths: dict mapping normalized series_name -> list of Jellyfin
+                    file paths, used for path prefix matching against Sonarr
+                    root paths. Multiple paths per show support multi-library
+                    setups (precise matching mode).
 
     Returns:
         - matched: seasons that were successfully matched to a Sonarr series
-        - unmatched: seasons with no Sonarr match (path or fuzzy both failed)
+        - unmatched: seasons with no Sonarr match
     """
     if not seasons or not sonarr_series:
         return [], seasons
+
+    show_paths = show_paths or {}
 
     # Keep full list + titles (with possible duplicates) for fuzzy matching
     sonarr_titles = [s.title for s in sonarr_series]
@@ -246,19 +258,35 @@ def match_seasons_to_sonarr(
     total = len(seasons)
 
     for i, season in enumerate(seasons):
-        # --- Primary: check if any Sonarr series path appears in the season's
-        #     series_name (a loose check since we only have the name from Jellyfin)
-        path_match = _path_match_season(season, sonarr_series)
-        if path_match:
-            season.matched_sonarr_path = path_match.path
-            season.match_method = "path"
-            season.size_on_disk = _get_season_size(path_match, season.season_number)
-            season.sonarr_series_id = path_match.id
+        # --- Primary: path prefix matching using resolved Jellyfin file paths
+        norm_name = normalize_title(season.series_name)
+        jf_paths = show_paths.get(norm_name, [])
+        path_hit = None
+        for jf_path in jf_paths:
+            path_hit = _path_match_by_prefix(jf_path, sonarr_series)
+            if path_hit:
+                break
+        if path_hit:
+            season.matched_sonarr_path = path_hit.path
+            season.match_method = MatchMethod.PATH
+            season.size_on_disk = _get_season_size(path_hit, season.season_number)
+            season.sonarr_series_id = path_hit.id
             matched.append(season)
             cb("Matching seasons", i + 1, total)
             continue
 
-        # --- Fallback: fuzzy match series name against Sonarr titles
+        # --- Secondary: title-based matching (exact, year-stripped, word-boundary)
+        title_match = _title_match_season(season, sonarr_series)
+        if title_match:
+            season.matched_sonarr_path = title_match.path
+            season.match_method = MatchMethod.PATH
+            season.size_on_disk = _get_season_size(title_match, season.season_number)
+            season.sonarr_series_id = title_match.id
+            matched.append(season)
+            cb("Matching seasons", i + 1, total)
+            continue
+
+        # --- Tertiary: fuzzy match series name against Sonarr titles
         top_matches = process.extract(
             season.series_name,
             sonarr_titles,
@@ -283,7 +311,7 @@ def match_seasons_to_sonarr(
                 and _length_ratio(season.series_name, title) >= LENGTH_RATIO_THRESHOLD
             ]
             season.matched_sonarr_path = sonarr_series[best_idx].path
-            season.match_method = "fuzzy"
+            season.match_method = MatchMethod.FUZZY
             season.fuzzy_score = best_score
             season.ambiguous_candidates = ambiguous
             season.size_on_disk = _get_season_size(sonarr_series[best_idx], season.season_number)
@@ -296,11 +324,28 @@ def match_seasons_to_sonarr(
 
     # Collision prevention: when multiple distinct Jellyfin names matched
     # the same Sonarr path, keep only the best match and unmatch the rest.
-    # E.g. "The Office (US)" exact-matches Sonarr, but "The Office" also
-    # matches via word-boundary -- the exact match should win.
     matched, unmatched = _deduplicate_matches(matched, unmatched, sonarr_series)
 
     return matched, unmatched
+
+
+def _path_match_by_prefix(
+    jellyfin_path: str,
+    sonarr_series: list[Series],
+) -> Optional[Series]:
+    """
+    Match a Jellyfin episode file path against Sonarr series root paths
+    by checking if the Sonarr path is a prefix of the Jellyfin path.
+    Same approach as movie path matching against Radarr.
+
+    Limitation: only one representative episode per show is resolved, so if
+    the same series exists in multiple Jellyfin libraries (e.g. /tv/ and
+    /tv-ger/), only one library's path is checked. See resolve_series_paths().
+    """
+    for series in sonarr_series:
+        if series.path in jellyfin_path:
+            return series
+    return None
 
 
 def _match_strength(season: SeasonSummary, sonarr_series: list[Series]) -> int:
@@ -421,7 +466,7 @@ def _length_ratio(a: str, b: str) -> float:
     return min(la, lb) / max(la, lb)
 
 
-def _path_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Optional[Series]:
+def _title_match_season(season: SeasonSummary, sonarr_series: list[Series]) -> Optional[Series]:
     """
     Try to match a season's series_name to a Sonarr series.
 

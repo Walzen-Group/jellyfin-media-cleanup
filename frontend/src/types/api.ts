@@ -16,6 +16,7 @@ export interface AnalysisRequest {
   mode: 'all' | 'movies' | 'series'
   monthThreshold: number        // Items not watched in N months are cleanup candidates
   addedThreshold: number        // Never-watched items added within N months are "new" (not deleted)
+  preciseMatching: boolean      // Resolve all episodes for path matching (slower, handles multi-library)
 }
 
 export interface JobResponse {
@@ -110,11 +111,11 @@ export interface MatchingStats {
 }
 
 /**
- * Episode resolution stats. Used for monitoring matching quality.
+ * Episode parsing stats. Used for monitoring matching quality.
  */
 export interface EpisodeStats {
-  skipped: number              // Jellyfin episodes with stale IDs (couldn't resolve)
-  fallback: number             // Episodes resolved via ItemName parsing (not API call)
+  skipped: number              // Episodes whose ItemName couldn't be parsed
+  unparseable: number          // Episodes with no recognizable season number
 }
 
 /**

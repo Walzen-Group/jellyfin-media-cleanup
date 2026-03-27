@@ -72,6 +72,12 @@ def run() -> None:
         default=12,
         help="Never-watched items added within this many months are shown as 'New (unwatched)' rather than cleanup candidates (default: 12)",
     )
+    parser.add_argument(
+        "--precise-matching",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Resolve all episodes for path matching (slower, correctly handles same series in multiple Jellyfin libraries). Use --no-precise-matching for faster one-rep-per-show mode (default: on)",
+    )
     args = parser.parse_args()
     mode = args.mode
 
@@ -96,12 +102,16 @@ def run() -> None:
     # CLI --months overrides config
     month_threshold = args.months if args.months is not None else config.month_threshold
 
+    precise_matching: bool = args.precise_matching
     mode_label = {"all": "movies + series", "movies": "movies only", "series": "series only"}[mode]
     console.print(f"  Threshold: [yellow]{month_threshold} months[/yellow]")
-    console.print(f"  Mode:      [yellow]{mode_label}[/yellow]\n")
+    console.print(f"  Mode:      [yellow]{mode_label}[/yellow]")
+    if mode in ("all", "series"):
+        console.print(f"  Matching:  [yellow]{'precise' if precise_matching else 'fast (one rep per show)'}[/yellow]")
+    console.print()
 
     # ----- Run the pipeline with Rich progress -----
-    step_offsets, _total_weight = get_pipeline_steps(mode)
+    step_offsets, _total_weight = get_pipeline_steps(mode, precise_matching)
 
     # Map each step name to its group ("movies" or "series")
     _movie_names = [name for name, _ in MOVIE_STEPS]
@@ -169,6 +179,7 @@ def run() -> None:
     result = service.run_analysis(
         mode=mode,
         month_threshold=month_threshold,
+        precise_matching=precise_matching,
         progress_callback=rich_progress_callback,
     )
     # Finalise the last group's Progress
@@ -336,13 +347,13 @@ def run() -> None:
 
     # Episode resolution stats
     if mode in ("all", "series"):
-        if s.episodes.fallback or s.episodes.skipped:
+        if s.episodes.unparseable or s.episodes.skipped:
             summary.add_section()
-        if s.episodes.fallback:
-            row = ["Episodes resolved via name fallback"]
+        if s.episodes.unparseable:
+            row = ["Episodes unparseable (no season number)"]
             if mode == "all":
                 row.append("")
-            row += ["", f"[yellow]{s.episodes.fallback}[/yellow]"]
+            row += ["", f"[yellow]{s.episodes.unparseable}[/yellow]"]
             if mode in ("all", "movies"):
                 row.append("")
             if mode in ("all", "series"):

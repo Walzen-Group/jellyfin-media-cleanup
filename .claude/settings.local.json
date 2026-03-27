@@ -16,7 +16,8 @@
       "mcp__plugin_context-mode_context-mode__ctx_execute",
       "Bash(pnpm vue-tsc:*)",
       "WebSearch",
-      "Bash(claude:*)"
+      "Bash(claude:*)",
+      "mcp__plugin_context-mode_context-mode__ctx_search"
     ]
   }
 }

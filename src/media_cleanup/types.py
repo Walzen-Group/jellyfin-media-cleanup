@@ -36,11 +36,10 @@ FilterCategory = Literal["old", "never", "never_new"]
 
 @dataclass
 class EpisodeInfo:
-    """A single watched episode resolved from Jellyfin, with series/season context."""
+    """A single watched episode parsed from Jellyfin PlaybackActivity."""
     item_id: str
     series_name: str
     season_number: int
-    file_path: str
     last_played: str  # ISO date string from PlaybackActivity (e.g. "2024-03-01 21:00:00")
 
 

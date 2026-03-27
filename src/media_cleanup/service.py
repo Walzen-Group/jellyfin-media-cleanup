@@ -71,6 +71,7 @@ class CleanupService:
         self,
         mode: str = "all",
         month_threshold: int | None = None,
+        precise_matching: bool = False,
         progress_callback: ProgressCallback | None = None,
         cancel_check: CancelCheck | None = None,
     ) -> CleanupResult:
@@ -81,6 +82,9 @@ class CleanupService:
         ----------
         mode : "all" | "movies" | "series"
         month_threshold : override config default if provided
+        precise_matching : resolve all episodes for path matching instead of
+                          one per show. Slower but handles same series in
+                          multiple Jellyfin libraries correctly.
         progress_callback : optional (step_name, current, total) hook
         cancel_check : optional callable; if it returns True a
                        CancellationError is raised between major steps
@@ -89,7 +93,7 @@ class CleanupService:
         result = CleanupResult()
         raw_cb = progress_callback or (lambda *_: None)
 
-        step_offsets, total_weight = get_pipeline_steps(mode)
+        step_offsets, total_weight = get_pipeline_steps(mode, precise_matching)
 
         def cb(step: str, current: int, total: int) -> None:
             """Translate per-step (current/total) into global progress."""
@@ -211,10 +215,17 @@ class CleanupService:
 
             self._check_cancel(cancel_check)
 
-            # Episode resolution is the heaviest step — callback goes through
-            # the global progress wrapper via the "Resolving episodes" base name
-            result.episodes = jellyfin.get_episode_metadata(
-                result.episode_dates, progress_callback=cb, cancel_check=cancel_check)
+            # Parse episode names from PlaybackActivity (pure, no HTTP)
+            result.episodes = jellyfin.parse_episode_dates(result.episode_dates)
+            cb("Parsing episode names", 1, 1)
+
+            self._check_cancel(cancel_check)
+
+            # Resolve episode file paths for Sonarr path matching.
+            # Default: one representative per show. Precise: all episodes.
+            show_paths = jellyfin.resolve_series_paths(
+                result.episodes, precise=precise_matching,
+                progress_callback=cb, cancel_check=cancel_check)
 
             self._check_cancel(cancel_check)
 
@@ -237,9 +248,9 @@ class CleanupService:
             def _seasons_cb2(_, c, t):
                 cb("Matching seasons", n_recent + c, n_total)
             recent_matched, recent_unmatched = match_seasons_to_sonarr(
-                recent_seasons, result.all_series, progress_callback=_seasons_cb)
+                recent_seasons, result.all_series, show_paths=show_paths, progress_callback=_seasons_cb)
             old_matched, old_unmatched = match_seasons_to_sonarr(
-                old_seasons, result.all_series, progress_callback=_seasons_cb2)
+                old_seasons, result.all_series, show_paths=show_paths, progress_callback=_seasons_cb2)
 
             # Generate synthetic SeasonSummary objects for unwatched seasons
             # within matched series. These fill the gap where a show has some
@@ -358,13 +369,23 @@ MOVIE_STEPS: list[tuple[str, int]] = [
 ]
 SERIES_STEPS: list[tuple[str, int]] = [
     ("Querying Jellyfin episode history", 2),
-    ("Resolving episodes", 60),
+    ("Parsing episode names", 1),
+    ("Resolving show paths", 8),
+    ("Fetching Sonarr library", 8),
+    ("Matching seasons", 5),
+]
+SERIES_STEPS_PRECISE: list[tuple[str, int]] = [
+    ("Querying Jellyfin episode history", 2),
+    ("Parsing episode names", 1),
+    ("Resolving show paths", 40),
     ("Fetching Sonarr library", 8),
     ("Matching seasons", 5),
 ]
 
 
-def get_pipeline_steps(mode: str) -> tuple[dict[str, tuple[int, int]], int]:
+def get_pipeline_steps(
+    mode: str, precise_matching: bool = False,
+) -> tuple[dict[str, tuple[int, int]], int]:
     """
     Return ``(step_offsets, total_weight)`` for the given analysis mode.
 
@@ -375,7 +396,7 @@ def get_pipeline_steps(mode: str) -> tuple[dict[str, tuple[int, int]], int]:
     if mode in ("all", "movies"):
         steps += MOVIE_STEPS
     if mode in ("all", "series"):
-        steps += SERIES_STEPS
+        steps += SERIES_STEPS_PRECISE if precise_matching else SERIES_STEPS
     total_weight = sum(w for _, w in steps)
     offsets: dict[str, tuple[int, int]] = {}
     offset = 0

@@ -7,8 +7,9 @@ to file paths via the Jellyfin /items endpoint, chunked to avoid URI
 length limits.
 
 For series, a single query fetches ALL ever-watched episodes with their
-most recent play date. These are then resolved to series/season metadata
-and grouped at the season level by the matching module.
+most recent play date. Episode ItemNames are parsed locally, then one
+representative episode per unique show is resolved via the /items API
+to obtain a file path for Sonarr path matching.
 """
 
 import requests as re
@@ -38,15 +39,6 @@ ItemResponseSchema = TypedDict('ItemResponseSchema',
                                    'Name': str,
                                    'MediaSources': list[MediaSourceSchema]
                                })
-
-EpisodeItemSchema = TypedDict('EpisodeItemSchema',
-                              {
-                                  'Id': str,
-                                  'Name': str,
-                                  'SeriesName': str,
-                                  'ParentIndexNumber': int,   # season number
-                                  'MediaSources': list[MediaSourceSchema]
-                              })
 
 PlaybackResponseSchema = TypedDict('PlaybackResponseSchema',
                                    {
@@ -163,36 +155,81 @@ class JellyfinClient:
             for r in response['results']
         }
 
-    def get_episode_metadata(
+    def parse_episode_dates(
         self,
         item_dates: dict[str, dict[str, str]],
-        progress_callback: ProgressCallback | None = None,
-        cancel_check: CancelCheck | None = None,
     ) -> list[EpisodeInfo]:
         """
-        Resolve a dict of {item_id: {"last_played": ..., "item_name": ...}}
-        to full EpisodeInfo records by fetching series name and season number
-        from the Jellyfin items API.
+        Parse episode ItemNames from PlaybackActivity into EpisodeInfo records.
 
-        When an item ID can no longer be resolved (e.g. stale after a library
-        re-scan), falls back to the ItemName from PlaybackActivity. These
-        fallback entries have season_number=-1 and an empty file_path, but
-        still carry the series name so they can reach fuzzy matching.
-
-        Automatically chunks requests to stay under URI length limits.
+        Pure string parsing, no HTTP calls. Episodes whose ItemName can't be
+        parsed are skipped (counted as "skipped" in EpisodeStats).
         """
-        ids = list(item_dates.keys())
-        chunks = list(range(0, len(ids), self.chunk_length))
         results: list[EpisodeInfo] = []
-        resolved_ids: set[str] = set()
+        for item_id, info in item_dates.items():
+            item_name = info.get('item_name', '')
+            if not item_name:
+                continue
+            series_name, season_number = self._parse_episode_item_name(item_name)
+            if not series_name:
+                continue
+            results.append(EpisodeInfo(
+                item_id=item_id,
+                series_name=series_name,
+                season_number=season_number,
+                last_played=info['last_played'],
+            ))
+        return results
+
+    def resolve_series_paths(
+        self,
+        episodes: list[EpisodeInfo],
+        precise: bool = False,
+        progress_callback: ProgressCallback | None = None,
+        cancel_check: CancelCheck | None = None,
+    ) -> dict[str, list[str]]:
+        """
+        Resolve episode IDs via the /items API to obtain file paths for
+        Sonarr path matching.
+
+        Returns a dict mapping normalized series_name -> list of file paths.
+
+        When precise=False (default), resolves one representative episode per
+        unique show. Fast, but if the same series exists in multiple Jellyfin
+        libraries (e.g. /tv/Show and /tv-ger/Show), only one path is returned.
+
+        When precise=True, resolves ALL episodes and collects all unique paths
+        per show. Slower, but correctly handles multi-library setups.
+        """
+        from collections import defaultdict
+        from media_cleanup.matching import normalize_title
+
+        if precise:
+            # Resolve all episode IDs
+            ids_to_resolve = [ep.item_id for ep in episodes]
+        else:
+            # Pick one episode ID per unique show (normalized name)
+            show_representatives: dict[str, str] = {}  # norm_name -> item_id
+            for ep in episodes:
+                norm = normalize_title(ep.series_name)
+                if norm not in show_representatives:
+                    show_representatives[norm] = ep.item_id
+            ids_to_resolve = list(show_representatives.values())
+
+        if not ids_to_resolve:
+            return {}
+
         cb = progress_callback or (lambda *_: None)
+        results: dict[str, set[str]] = defaultdict(set)
+        total = len(ids_to_resolve)
         resolved_count = 0
+        chunks = list(range(0, total, self.chunk_length))
 
         for i in chunks:
             if cancel_check and cancel_check():
                 from media_cleanup.service import CancellationError
                 raise CancellationError("Pipeline cancelled by caller")
-            chunk = ids[i:i + self.chunk_length]
+            chunk = ids_to_resolve[i:i + self.chunk_length]
             res = re.get(
                 f'{self.root_url}/items'
                 f'?ids={",".join(chunk)}'
@@ -200,70 +237,29 @@ class JellyfinClient:
                 headers=self._header)
             res.raise_for_status()
 
-            returned_ids: set[str] = set()
+            returned_count = 0
             for item in res.json().get('Items', []):
-                item_id = item.get('Id')
-                returned_ids.add(item_id)
-                series_name = item.get('SeriesName')
-                season_number = item.get('ParentIndexNumber')
+                returned_count += 1
+                series_name = item.get('SeriesName', '')
                 media_sources = item.get('MediaSources', [])
-
-                # Skip episodes missing required metadata — they'll be handled
-                # in the fallback pass below
-                if not series_name or season_number is None or not media_sources:
+                if not series_name or not media_sources:
                     resolved_count += 1
-                    cb("Resolving episodes", resolved_count, len(ids))
+                    cb("Resolving show paths", resolved_count, total)
                     continue
-
-                resolved_ids.add(item_id)
-                results.append(EpisodeInfo(
-                    item_id=item_id,
-                    series_name=series_name,
-                    season_number=season_number,
-                    file_path=media_sources[0].get('Path', ''),
-                    last_played=item_dates[item_id]['last_played'],
-                ))
-
+                file_path = media_sources[0].get('Path', '')
+                if file_path:
+                    norm = normalize_title(series_name)
+                    results[norm].add(file_path)
                 resolved_count += 1
-                # Emit the current show name so callers can display it
-                cb(f"Resolving episodes: {series_name}", resolved_count, len(ids))
+                cb(f"Resolving show paths: {series_name}", resolved_count, total)
 
-            # Advance for IDs that the API didn't return (stale/deleted)
-            missing_count = len(chunk) - len(returned_ids)
-            if missing_count > 0:
-                resolved_count += missing_count
-                cb("Resolving episodes", resolved_count, len(ids))
+            # Advance past stale IDs the API didn't return
+            stale_count = len(chunk) - returned_count
+            if stale_count > 0:
+                resolved_count += stale_count
+                cb("Resolving show paths", resolved_count, total)
 
-        # ----- Fallback: use ItemName from PlaybackActivity for unresolved IDs -----
-        unresolved_ids = set(ids) - resolved_ids
-        fallback_results: list[EpisodeInfo] = []
-        fallback_failed = 0
-        if unresolved_ids:
-            cb("Resolving episodes: name fallback", resolved_count, len(ids))
-            for item_id in unresolved_ids:
-                info = item_dates[item_id]
-                item_name = info.get('item_name', '')
-                if not item_name:
-                    fallback_failed += 1
-                    continue
-
-                series_name, season_number = self._parse_episode_item_name(item_name)
-                if not series_name:
-                    fallback_failed += 1
-                    continue
-
-                fallback_results.append(EpisodeInfo(
-                    item_id=item_id,
-                    series_name=series_name,
-                    season_number=season_number,
-                    file_path='',
-                    last_played=info['last_played'],
-                ))
-
-        results.extend(fallback_results)
-        cb("Resolving episodes: done", len(ids), len(ids))
-
-        return results
+        return {k: list(v) for k, v in results.items()}
 
     @staticmethod
     def _parse_episode_item_name(item_name: str) -> tuple[str, int]:

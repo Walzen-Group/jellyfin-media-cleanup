@@ -74,6 +74,7 @@ class AnalysisRequest(_Base):
     mode: MediaMode = "all"
     month_threshold: int = 6
     added_threshold: int = 12  # months -- never-watched items added within this are "never_new"
+    precise_matching: bool = True  # resolve all episodes for path matching (slower, handles multi-library)
 
 
 class JobStatus(StrEnum):
@@ -181,9 +182,9 @@ class MatchingStats(_Base):
 
 
 class EpisodeStats(_Base):
-    """Episode resolution stats."""
+    """Episode parsing stats."""
     skipped: int = 0
-    fallback: int = 0
+    unparseable: int = 0
 
 
 class SpaceSavings(_Base):
@@ -480,7 +481,7 @@ def build_summary(result: CleanupResult, mode: str = "all", added_threshold: int
         ),
         episodes=EpisodeStats(
             skipped=len(result.episode_dates) - len(result.episodes),
-            fallback=sum(1 for ep in result.episodes if ep.season_number == -1),
+            unparseable=sum(1 for ep in result.episodes if ep.season_number == -1),
         ),
         space_savings=SpaceSavings(
             seasons_only_size=seasons_only,

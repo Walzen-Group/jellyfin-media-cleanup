@@ -53,15 +53,17 @@ Key models: `AnalysisRequest`, `JobResponse`, `MovieMatch`, `SeasonInfo`, `Serie
 
 ### Matching
 
-**`matching.py`** -- title matching. Constants: `LENGTH_RATIO_THRESHOLD=0.65`, `FUZZY_THRESHOLD=88`, `AMBIGUITY_MARGIN=5`.
+**`matching.py`** -- series/movie matching. Constants: `LENGTH_RATIO_THRESHOLD=0.65`, `FUZZY_THRESHOLD=88`, `AMBIGUITY_MARGIN=5`.
 
 Functions: `normalize_title` (lowercase, & -> and, strip punctuation), `_strip_year` (remove trailing (YYYY) -- before normalizing), `_pick_by_watch_date` (closest year <= watch year).
 
-`_path_match_season` 3-pass: exact normalized -> year-stripped with watch-date disambiguation -> word-boundary containment with length guard. Falls back to rapidfuzz `token_sort_ratio`.
+Series matching 3-tier: (1) `_path_match_by_prefix` -- Jellyfin file path prefix vs Sonarr root path (like movies vs Radarr), (2) `_title_match_season` 3-pass: exact normalized -> year-stripped with watch-date disambiguation -> word-boundary containment with length guard, (3) rapidfuzz `token_sort_ratio` fallback.
+
+**Known limitation**: series path matching resolves one representative episode per unique show. If the same series exists in multiple Jellyfin libraries (e.g. `/tv/` and `/tv-ger/`), only one library's path is used for matching. The other copy may match via title fallback but could pick the wrong Sonarr entry.
 
 ### Clients
 
-- `jellyfin.py` -- Playback Reporting plugin SQL queries, episode metadata via `/items` API with ItemName fallback parsing, ~200 IDs per chunk. `requests` aliased as `re` (intentional). Known typo: response field is `colums`.
+- `jellyfin.py` -- Playback Reporting plugin SQL queries. Series episodes are parsed from ItemName strings (`parse_episode_dates`), then one representative episode per show is resolved via `/items` API to get file paths for Sonarr path matching (`resolve_series_paths`). Movie paths resolved via `get_file_paths`, ~200 IDs per chunk. `requests` aliased as `re` (intentional). Known typo: response field is `colums`.
 - `sonarr.py` / `radarr.py` -- fetch libraries with optional "keep" tag filtering. API v3, `X-Api-Key` header.
 
 ### Other Modules
