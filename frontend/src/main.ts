@@ -4,6 +4,7 @@ import PrimeVue from 'primevue/config'
 import Aura from '@primeuix/themes/aura'
 import { definePreset } from '@primeuix/themes'
 import Tooltip from 'primevue/tooltip'
+import ConfirmationService from 'primevue/confirmationservice'
 import App from './App.vue'
 import 'primeicons/primeicons.css'
 import './style.css'
@@ -40,5 +41,6 @@ app.use(PrimeVue, {
     },
   },
 })
+app.use(ConfirmationService)
 app.directive('tooltip', Tooltip)
 app.mount('#app')

@@ -77,50 +77,59 @@ const autoKeepCount = computed(() => {
           </Message>
 
           <!-- Show results when a completed job result is available -->
-          <template v-if="store.currentJob?.result">
-            <!-- Summary statistics: counts and sizes across all categories -->
-            <SummaryPanel :summary="store.currentJob.result.summary" />
+          <Transition name="fade-slide" mode="out-in">
+            <div v-if="store.currentJob?.result" class="space-y-6">
+              <!-- Summary statistics: counts and sizes across all categories -->
+              <SummaryPanel :summary="store.currentJob.result.summary" class="stagger-in" style="--stagger-index: 0" />
 
-            <!-- Flattened tables with filtering/sorting. Series shown by default (first tab). -->
-            <div class="card px-1 py-2 sm:p-5">
-              <Tabs value="series">
-                <TabList>
-                  <Tab value="series">Series ({{ store.allSeries.length }})</Tab>
-                  <Tab value="movies">Movies ({{ store.allMovies.length }})</Tab>
-                </TabList>
-                <TabPanels>
-                  <TabPanel value="series">
-                    <div class="pt-4">
-                      <SeriesTable :series="store.allSeries" />
-                    </div>
-                  </TabPanel>
-                  <TabPanel value="movies">
-                    <div class="pt-4">
-                      <MovieTable :movies="store.allMovies" />
-                    </div>
-                  </TabPanel>
-                </TabPanels>
-              </Tabs>
+              <!-- Flattened tables with filtering/sorting. Series shown by default (first tab). -->
+              <div class="card px-1 py-2 sm:p-5 stagger-in" style="--stagger-index: 1">
+                <Tabs value="series">
+                  <TabList>
+                    <Tab value="series">Series ({{ store.allSeries.length }})</Tab>
+                    <Tab value="movies">Movies ({{ store.allMovies.length }})</Tab>
+                  </TabList>
+                  <TabPanels>
+                    <TabPanel value="series">
+                      <div class="pt-4">
+                        <SeriesTable :series="store.allSeries" />
+                      </div>
+                    </TabPanel>
+                    <TabPanel value="movies">
+                      <div class="pt-4">
+                        <MovieTable :movies="store.allMovies" />
+                      </div>
+                    </TabPanel>
+                  </TabPanels>
+                </Tabs>
+              </div>
             </div>
 
-          </template>
+            <!-- Spinner shown while fetching initial job from API -->
+            <div
+              v-else-if="store.loading"
+              key="loading"
+              class="py-16 flex items-center justify-center"
+            >
+              <ProgressSpinner style="width: 96px; height: 96px" strokeWidth="6" />
+            </div>
 
-          <!-- Spinner shown while fetching initial job from API -->
-          <div
-            v-else-if="store.loading"
-            class="py-16 flex items-center justify-center"
-          >
-            <ProgressSpinner style="width: 96px; height: 96px" strokeWidth="6" />
-          </div>
-
-          <!-- Empty state: no job result yet; prompt user to run analysis -->
-          <div
-            v-else-if="!store.isAnalyzing"
-            class="card p-6 sm:p-12 flex flex-col items-center justify-center text-center text-surface-500"
-          >
-            <p class="text-xl mb-2">No analysis results yet</p>
-            <p class="text-sm">Configure options above and click "Run Analysis" to start.</p>
-          </div>
+            <!-- Empty state: no job result yet; prompt user to run analysis -->
+            <div
+              v-else-if="!store.isAnalyzing"
+              key="empty"
+              class="card p-6 sm:p-12 flex flex-col items-center justify-center text-center text-surface-500"
+            >
+              <svg class="w-12 h-12 text-surface-300 dark:text-surface-600 mb-4 float-gentle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <p class="text-lg font-medium mb-1.5">No analysis results yet</p>
+              <p class="text-sm text-surface-400 max-w-md">
+                Cross-references your Jellyfin watch history with Sonarr and Radarr to find media eligible for cleanup.
+                Set your thresholds above and click <strong class="text-surface-500 dark:text-surface-300">Run Analysis</strong> to start.
+              </p>
+            </div>
+          </Transition>
         </div>
       </StepPanel>
 

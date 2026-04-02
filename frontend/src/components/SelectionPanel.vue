@@ -176,10 +176,10 @@ async function proceedToPrepare() {
           @click="store.setWizardStep(1)"
         />
         <Button
-          label="Filter"
-          icon="pi pi-filter"
-          :loading="store.filterLoading"
+          :label="store.filterLoading ? 'Filtering...' : (filterStale && store.filteredResult ? 'Re-filter' : 'Filter')"
+          :icon="store.filterLoading ? 'pi pi-spin pi-spinner' : 'pi pi-filter'"
           :disabled="categories.length === 0 || store.filterLoading"
+          :severity="filterStale && store.filteredResult ? 'warn' : undefined"
           @click="filter"
         />
       </div>
@@ -189,10 +189,9 @@ async function proceedToPrepare() {
     <div v-if="store.filteredResult" class="card p-3 sm:p-5">
       <div class="flex items-center gap-3">
         <Button
-          label="Next"
-          icon="pi pi-arrow-right"
-          iconPos="right"
-          :loading="nextLoading"
+          :label="nextLoading ? 'Preparing...' : 'Next'"
+          :icon="nextLoading ? 'pi pi-spin pi-spinner' : 'pi pi-arrow-right'"
+          :iconPos="nextLoading ? 'left' : 'right'"
           :disabled="filterStale || nextLoading"
           @click="proceedToPrepare"
         />

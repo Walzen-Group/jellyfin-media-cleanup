@@ -393,8 +393,11 @@ onMounted(async () => {
       v-else-if="isEmpty"
       class="card p-6 sm:p-12 flex flex-col items-center justify-center text-center"
     >
-      <p class="text-surface-400 text-lg">Nothing to clean up</p>
-      <p class="text-xs text-surface-400 mt-2">
+      <svg class="w-12 h-12 text-surface-300 dark:text-surface-600 mb-4 float-gentle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <p class="text-lg font-medium text-surface-500">Nothing to clean up</p>
+      <p class="text-sm text-surface-400 mt-1.5">
         The selected filters did not produce any items with valid library IDs.
       </p>
     </div>

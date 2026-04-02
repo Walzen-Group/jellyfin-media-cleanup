@@ -12,6 +12,24 @@ export default defineConfig({
   define: {
     __GIT_HASH__: JSON.stringify(gitHash),
   },
+  build: {
+    chunkSizeWarningLimit: 850,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/primevue') || id.includes('node_modules/@primeuix')) {
+            return 'primevue'
+          }
+          if (id.includes('node_modules/vue') || id.includes('node_modules/pinia') || id.includes('node_modules/@vue')) {
+            return 'vue-vendor'
+          }
+          if (id.includes('node_modules/oidc-client-ts')) {
+            return 'oidc'
+          }
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     allowedHosts: true,

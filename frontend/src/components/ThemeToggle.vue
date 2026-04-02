@@ -13,7 +13,7 @@ const icons: Record<string, string> = {
 <template>
   <button
     @click="theme.cycle()"
-    class="cursor-pointer flex items-center gap-1.5 rounded px-2.5 py-1 text-sm
+    class="theme-toggle-btn cursor-pointer flex items-center gap-1.5 rounded px-2.5 py-1 text-sm
            text-indigo-200 hover:text-white hover:bg-indigo-500/30 dark:hover:bg-indigo-800/50 transition-colors"
     :title="`Theme: ${theme.mode}`"
   >

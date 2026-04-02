@@ -2,14 +2,17 @@
 import { ref, inject, onMounted, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useJobStore } from '../stores/jobStore'
+import { useConfirm } from 'primevue/useconfirm'
 import Select from 'primevue/select'
 import InputText from 'primevue/inputtext'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Button from 'primevue/button'
+import ConfirmPopup from 'primevue/confirmpopup'
 import ProgressBar from './ProgressBar.vue'
 import type { AnalysisRequest } from '../types/api'
 
 const store = useJobStore()
+const confirm = useConfirm()
 const { applyAutoKeep, hasCleanupHistory } = storeToRefs(store)
 // Injected from App.vue; prevents starting analysis without a live WebSocket connection
 const wsConnected = inject<Ref<boolean>>('wsConnected', ref(false))
@@ -70,6 +73,19 @@ async function runAnalysis() {
   }
 }
 
+function confirmClear(event: Event) {
+  confirm.require({
+    target: event.currentTarget as HTMLElement,
+    message: 'Discard analysis results?',
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Discard',
+    rejectProps: { severity: 'secondary', text: true, size: 'small' },
+    acceptProps: { severity: 'danger', size: 'small' },
+    accept: () => store.clearResults(),
+  })
+}
+
 onMounted(() => {
   store.fetchHasCleanupHistory()
 })
@@ -77,6 +93,7 @@ onMounted(() => {
 
 <template>
   <div class="card p-3 sm:p-5 space-y-4">
+    <ConfirmPopup />
     <div class="flex flex-wrap items-end gap-3 sm:gap-4">
       <div>
         <label class="block text-xs font-medium text-surface-500 mb-1.5 uppercase tracking-wide">Mode</label>
@@ -154,18 +171,21 @@ onMounted(() => {
         :disabled="cancelling"
         @click="cancel"
       />
-      <!-- Clear button only shown when analysis is idle and a result exists -->
-      <Button
-        v-if="!store.isAnalyzing && !submitting && store.currentJob?.result"
-        label="Clear"
-        icon="pi pi-trash"
-        severity="secondary"
-        text
-        @click="store.clearResults()"
-      />
 
       <!-- Extra actions injected by parent (e.g. Next button) -->
-      <div class="ml-auto"><slot name="actions" /></div>
+      <div class="ml-auto flex items-center gap-2">
+        <slot name="actions" />
+        <!-- Clear: confirm popup anchored to button, no layout shift -->
+        <Button
+          v-if="!store.isAnalyzing && !submitting && store.currentJob?.result"
+          label="Clear"
+          icon="pi pi-trash"
+          severity="secondary"
+          text
+          size="small"
+          @click="confirmClear"
+        />
+      </div>
     </div>
 
     <!-- History available indicator -->
@@ -174,8 +194,17 @@ onMounted(() => {
       <span>Previous deletion data available, auto-keep is active</span>
     </div>
 
-    <div v-if="store.error" class="text-red-500 text-sm">
-      {{ store.error }}
+    <div v-if="store.error" class="flex items-center gap-2 text-red-500 text-sm">
+      <i class="pi pi-exclamation-circle shrink-0" />
+      <span>{{ store.error }}</span>
+      <Button
+        label="Retry"
+        icon="pi pi-refresh"
+        severity="secondary"
+        size="small"
+        text
+        @click="runAnalysis"
+      />
     </div>
 
     <ProgressBar

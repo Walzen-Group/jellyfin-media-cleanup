@@ -108,6 +108,15 @@ const filteredCount = computed(() => {
         placeholder="Search series..."
         class="!text-sm w-72"
       />
+      <!-- Season dot color legend -->
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-surface-400">
+        <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-emerald-400/70" />Recent</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-rose-400/70" />Not recent</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-purple-400/70" />Never</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-cyan-400/70" />New</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-amber-400/70" />Kept</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-2 h-2 rounded-sm bg-surface-300 dark:bg-surface-600" />Unmatched</span>
+      </div>
       <span class="text-sm text-surface-500 ml-auto">
         {{ filteredCount }} of {{ series.length }} series
       </span>

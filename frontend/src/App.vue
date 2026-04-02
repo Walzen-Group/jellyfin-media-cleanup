@@ -73,8 +73,8 @@ onMounted(() => {
   <!-- Login page (auth enabled but not authenticated) -->
   <div v-else-if="!isAuthenticated" class="min-h-screen flex items-center justify-center bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-0">
     <div class="bg-surface-0 dark:bg-surface-900 rounded-xl shadow-lg p-8 max-w-sm w-full text-center">
-      <h1 class="text-2xl font-bold mb-2">Jellyfin Media Cleanup</h1>
-      <p class="text-surface-500 dark:text-surface-400 mb-6">Please sign in to continue</p>
+      <h1 class="text-2xl font-semibold tracking-tight mb-2">Jellyfin Media Cleanup</h1>
+      <p class="text-sm text-surface-500 dark:text-surface-400 mb-6">Please sign in to continue</p>
 
       <!-- SSO login -- only shown when OIDC is configured on the backend -->
       <Button v-if="authEnabled" label="Sign in with SSO" icon="pi pi-sign-in" class="w-full" @click="login" />
@@ -96,11 +96,11 @@ onMounted(() => {
           @keyup.enter="handleTokenLogin"
         />
         <Button
-          label="Sign in with token"
-          icon="pi pi-key"
+          :label="tokenLoading ? 'Signing in...' : 'Sign in with token'"
+          :icon="tokenLoading ? 'pi pi-spin pi-spinner' : 'pi pi-key'"
           severity="secondary"
           class="w-full"
-          :loading="tokenLoading"
+          :disabled="tokenLoading"
           @click="handleTokenLogin"
         />
         <!-- Token validation error message -->
@@ -110,9 +110,9 @@ onMounted(() => {
   </div>
 
   <!-- Authenticated content -->
-  <div v-else class="min-h-screen bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-0 transition-colors text-[15px]">
+  <div v-else class="min-h-screen bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-0 transition-colors text-base">
     <header class="px-3 sm:px-6 py-3.5 flex items-center justify-between bg-indigo-500/90 dark:bg-indigo-900 text-white">
-      <h1 class="flex items-center gap-2.5 text-lg font-semibold tracking-wide">
+      <h1 class="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
         <svg width="20" height="18" viewBox="0 0 20 18" fill="currentColor" class="shrink-0 opacity-90 -mb-0.5">
           <rect x="3" y="0" width="14" height="6" rx="1.5" />
           <rect x="0" y="5" width="20" height="7" rx="1.5" />
@@ -157,7 +157,9 @@ onMounted(() => {
         <div class="flex items-center gap-2 text-sm text-indigo-200">
           <span
             class="inline-block w-2 h-2 rounded-full"
-            :class="isConnected ? 'bg-green-500' : 'bg-red-500'"
+            :class="[
+              isConnected ? 'bg-green-500 status-dot-connected' : 'bg-red-500',
+            ]"
           />
           {{ isConnected ? 'Connected' : 'Disconnected' }}
         </div>

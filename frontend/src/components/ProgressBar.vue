@@ -72,7 +72,7 @@ onUnmounted(() => clearInterval(timer))
         <!-- Show pipeline progress (e.g. "3/8") only if both step index and total are provided -->
         <span v-if="stepIndex && totalSteps" class="text-surface-400 ml-1.5">({{ stepIndex }}/{{ totalSteps }})</span>
         <!-- Whimsical message that cycles periodically -->
-        <span class="text-surface-400 ml-2 italic font-normal">{{ currentVibe }}</span>
+        <span class="vibe-text italic font-normal ml-2">{{ currentVibe }}</span>
       </span>
     </div>
     <!-- Animated striped progress bar (capped at 100%) -->
@@ -99,5 +99,26 @@ onUnmounted(() => clearInterval(timer))
 @keyframes stripe-move {
   from { background-position: 28px 0; }
   to { background-position: 0 0; }
+}
+
+.vibe-text {
+  background: linear-gradient(
+    90deg,
+    #818cf8,   /* indigo-400 */
+    #93c5fd,   /* blue-300 */
+    #818cf8,   /* indigo-400 */
+    #a5b4fc,   /* indigo-300 */
+    #818cf8    /* indigo-400 */
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: vibe-shimmer 3s linear infinite;
+}
+
+@keyframes vibe-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
 }
 </style>

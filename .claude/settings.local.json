@@ -20,7 +20,11 @@
       "mcp__plugin_context-mode_context-mode__ctx_search",
       "mcp__plugin_context-mode_context-mode__ctx_execute_file",
       "Bash(pnpm exec:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(find /Users/sam/repos/jellyfin-media-cleanup -type f \\\\\\(-name .impeccable* -o -name design.* -o -name theme.* -o -name tokens.* \\\\\\))",
+      "Bash(grep -r \"font-family\\\\|@import.*font\\\\|Google Fonts\\\\|@font-face\" /Users/sam/repos/jellyfin-media-cleanup/frontend/src --include=*.css --include=*.vue --include=*.ts)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm vite:*)"
     ]
   }
 }

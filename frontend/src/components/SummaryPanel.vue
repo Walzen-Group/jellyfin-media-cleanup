@@ -94,7 +94,7 @@ const rows: Row[] = [
 <template>
   <div class="card overflow-x-auto">
     <div class="px-4 py-3">
-      <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Summary</h2>
+      <h2 class="text-xs font-semibold text-surface-500 uppercase tracking-wider">Summary</h2>
     </div>
     <table class="w-full text-xs sm:text-sm">
       <thead>

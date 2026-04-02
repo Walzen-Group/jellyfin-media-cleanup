@@ -121,20 +121,20 @@ onMounted(() => {
 
         <!-- Selection summary from PreparePanel -->
         <div v-if="selectionSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold text-primary-500">{{ selectionSummary.movieCount }}</div>
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 0">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums text-primary-500">{{ selectionSummary.movieCount }}</div>
             <div class="text-xs text-surface-500 mt-1">Movies</div>
           </div>
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold text-primary-500">{{ selectionSummary.fullSeriesCount }}</div>
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 1">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums text-primary-500">{{ selectionSummary.fullSeriesCount }}</div>
             <div class="text-xs text-surface-500 mt-1">Full Series</div>
           </div>
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold text-primary-500">{{ selectionSummary.seasonCleanupCount }}</div>
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 2">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums text-primary-500">{{ selectionSummary.seasonCleanupCount }}</div>
             <div class="text-xs text-surface-500 mt-1">Season Cleanups</div>
           </div>
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold text-orange-500">{{ selectionSummary.totalSizeFmt }}</div>
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 3">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums text-orange-500">{{ selectionSummary.totalSizeFmt }}</div>
             <div class="text-xs text-surface-500 mt-1">Total Size</div>
           </div>
         </div>
@@ -152,10 +152,12 @@ onMounted(() => {
           </label>
         </div>
 
-        <div v-if="!simulate" class="flex items-start gap-2 text-sm text-orange-600 dark:text-orange-400">
-          <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
-          <span>Simulation mode is OFF. Files will be permanently deleted via Radarr/Sonarr APIs.</span>
-        </div>
+        <Transition name="fade-slide">
+          <div v-if="!simulate" class="flex items-start gap-2 text-sm text-orange-600 dark:text-orange-400">
+            <i class="pi pi-exclamation-triangle mt-0.5 shrink-0" />
+            <span>Simulation mode is OFF. Files will be permanently deleted via Radarr/Sonarr APIs.</span>
+          </div>
+        </Transition>
 
         <div class="flex gap-3">
           <Button
@@ -234,22 +236,22 @@ onMounted(() => {
 
         <!-- Summary stats -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold text-green-500">{{ cleanupReport.deletedCount }}</div>
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 0">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums text-green-500">{{ cleanupReport.deletedCount }}</div>
             <div class="text-xs text-surface-500 mt-1">{{ cleanupReport.simulate ? 'Simulated' : 'Deleted' }}</div>
           </div>
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold" :class="cleanupReport.failedCount > 0 ? 'text-red-500' : 'text-surface-400'">
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 1">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums" :class="cleanupReport.failedCount > 0 ? 'text-red-500' : 'text-surface-400'">
               {{ cleanupReport.failedCount }}
             </div>
             <div class="text-xs text-surface-500 mt-1">Failed</div>
           </div>
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold text-primary-500">{{ cleanupReport.totalSizeFmt }}</div>
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 2">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums text-primary-500">{{ cleanupReport.totalSizeFmt }}</div>
             <div class="text-xs text-surface-500 mt-1">Total Size</div>
           </div>
-          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center">
-            <div class="text-2xl font-bold text-surface-500">{{ cleanupReport.entries.length }}</div>
+          <div class="rounded-lg bg-surface-100 dark:bg-surface-800 p-3 text-center stagger-in" style="--stagger-index: 3">
+            <div class="text-2xl font-semibold tracking-tight tabular-nums text-surface-500">{{ cleanupReport.entries.length }}</div>
             <div class="text-xs text-surface-500 mt-1">Items Processed</div>
           </div>
         </div>
