@@ -28,13 +28,17 @@ const { mediaType } = storeToRefs(store)
 
 const MAX_SIZE_SLIDER = 200  // represents 200 GB; treated as "no limit"
 
-const categories = ref<string[]>([])
-const greedy = ref(false)
-const sizeRange = ref<[number, number]>([0, MAX_SIZE_SLIDER])
-const appliedCategories = ref<string[]>([])
-const appliedGreedy = ref(false)
-const appliedMediaType = ref<string>('all')
-const appliedSizeRange = ref<[number, number]>([0, MAX_SIZE_SLIDER])
+// Initialize from restored filter state (backend wizard sync) or empty defaults
+const categories = ref<string[]>([...store.lastFilterCategories])
+const greedy = ref(store.lastFilterGreedy)
+const sizeRange = ref<[number, number]>([
+  store.lastFilterMinSizeBytes > 0 ? Math.round(store.lastFilterMinSizeBytes / (1024 * 1024 * 1024)) : 0,
+  store.lastFilterMaxSizeBytes != null ? Math.round(store.lastFilterMaxSizeBytes / (1024 * 1024 * 1024)) : MAX_SIZE_SLIDER,
+])
+const appliedCategories = ref<string[]>([...store.lastFilterCategories])
+const appliedGreedy = ref(store.lastFilterGreedy)
+const appliedMediaType = ref<string>(store.mediaType)
+const appliedSizeRange = ref<[number, number]>([...sizeRange.value] as [number, number])
 
 /** Convert a slider GB value to bytes for display (e.g. formatSize(sliderGbToBytes(5)) => "5.0 GB") */
 function sliderGbToBytes(gb: number): number {

@@ -98,14 +98,15 @@ class TestExecuteCleanupSelection:
             or _make_fake_cleanup_job(run_plan, simulate)
         )
 
-        app = create_app()
-        with patch("media_cleanup.server.routes.cleanup_manager", mock_manager):
-            client = TestClient(app)
-            response = client.post(
-                "/api/cleanup/execute",
-                content=request.model_dump_json(by_alias=True),
-                headers={"Content-Type": "application/json"},
-            )
+        with patch("media_cleanup.server.app.is_auth_enabled", return_value=False):
+            app = create_app()
+            with patch("media_cleanup.server.routes.cleanup_manager", mock_manager):
+                client = TestClient(app)
+                response = client.post(
+                    "/api/cleanup/execute",
+                    content=request.model_dump_json(by_alias=True),
+                    headers={"Content-Type": "application/json"},
+                )
 
         assert response.status_code == 202
         assert mock_manager.submit.call_count == 1
@@ -147,14 +148,15 @@ class TestExecuteCleanupSelection:
             or _make_fake_cleanup_job(run_plan, simulate)
         )
 
-        app = create_app()
-        with patch("media_cleanup.server.routes.cleanup_manager", mock_manager):
-            client = TestClient(app)
-            response = client.post(
-                "/api/cleanup/execute",
-                content=request.model_dump_json(by_alias=True),
-                headers={"Content-Type": "application/json"},
-            )
+        with patch("media_cleanup.server.app.is_auth_enabled", return_value=False):
+            app = create_app()
+            with patch("media_cleanup.server.routes.cleanup_manager", mock_manager):
+                client = TestClient(app)
+                response = client.post(
+                    "/api/cleanup/execute",
+                    content=request.model_dump_json(by_alias=True),
+                    headers={"Content-Type": "application/json"},
+                )
 
         assert response.status_code == 202
         assert mock_manager.submit.call_count == 1

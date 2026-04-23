@@ -5,6 +5,7 @@ import type {
   MovieRow, SeriesRow, FilteredResult, RunPlan,
   CleanupLogEntry, CleanupReport,
   MovieDeletion, FullSeriesDeletion, SeasonCleanup,
+  WizardState, AnalysisParams as AnalysisParamsType,
 } from '../types/api'
 import { useApi } from '../composables/useApi'
 
@@ -19,6 +20,7 @@ export const useJobStore = defineStore('job', () => {
 
   // Wizard state for the stepper UI
   const wizardStep = ref(1)
+  const analysisParams = ref<AnalysisParamsType | null>(null)
   const filteredResult = ref<FilteredResult | null>(null)
   const filterLoading = ref(false)
   const runPlan = ref<RunPlan | null>(null)
@@ -153,15 +155,24 @@ export const useJobStore = defineStore('job', () => {
 
   /**
    * Save user's checkbox selections from PreparePanel before navigating to cleanup.
+   * Syncs to backend so other clients can see the selections.
    */
   function setCleanupSelection(movies: MovieDeletion[], fullSeries: FullSeriesDeletion[], seasonCleanups: SeasonCleanup[]) {
     selectedMovieDeletions.value = movies
     selectedFullSeriesDeletions.value = fullSeries
     selectedSeasonCleanups.value = seasonCleanups
+    api.updateWizardState({
+      prepareSelections: {
+        movieDeletions: movies,
+        fullSeriesDeletions: fullSeries,
+        seasonCleanups,
+      },
+    })
   }
 
   /**
    * Navigate the wizard stepper. Clears downstream state when stepping back.
+   * Optimistically updates locally, then syncs to backend (which broadcasts to other clients).
    */
   function setWizardStep(step: number) {
     wizardStep.value = step
@@ -171,21 +182,95 @@ export const useJobStore = defineStore('job', () => {
     if (step === 1) {
       filteredResult.value = null
     }
+    api.updateWizardState({ step })
+  }
+
+  /**
+   * Apply wizard state received from the backend (via WS sync or REST fallback).
+   * Updates all relevant store refs to match the server's authoritative state.
+   * Also triggers lazy-fetch of derived data (filtered result, run plan) if the
+   * current step requires data we don't yet have locally.
+   */
+  function applyWizardState(state: WizardState) {
+    wizardStep.value = state.step
+    analysisParams.value = state.analysisParams
+
+    if (state.filterSettings) {
+      mediaType.value = state.filterSettings.mediaType ?? 'all'
+      lastFilterCategories.value = state.filterSettings.categories ?? []
+      lastFilterGreedy.value = state.filterSettings.greedy ?? false
+      lastFilterMinSizeBytes.value = state.filterSettings.minSizeBytes ?? 0
+      lastFilterMaxSizeBytes.value = state.filterSettings.maxSizeBytes ?? null
+    }
+
+    if (state.analysisParams) {
+      applyAutoKeep.value = state.analysisParams.applyAutoKeep
+    }
+
+    if (state.prepareSelections) {
+      selectedMovieDeletions.value = state.prepareSelections.movieDeletions ?? []
+      selectedFullSeriesDeletions.value = state.prepareSelections.fullSeriesDeletions ?? []
+      selectedSeasonCleanups.value = state.prepareSelections.seasonCleanups ?? []
+    }
+
+    // Fire-and-forget: fetch any data the current step needs but the client doesn't have yet
+    ensureStepData()
+  }
+
+  /**
+   * Lazy-fetch derived data (filteredResult, runPlan) required by the current wizard step.
+   * Skips any fetch if the job result isn't loaded, filter settings are empty, or the data
+   * is already cached locally. Safe to call repeatedly.
+   */
+  async function ensureStepData() {
+    const job = currentJob.value
+    if (!job?.result || !job.jobId) return
+    if (lastFilterCategories.value.length === 0) return
+
+    const req = {
+      categories: lastFilterCategories.value,
+      greedy: lastFilterGreedy.value,
+      mediaType: mediaType.value,
+      minSizeBytes: lastFilterMinSizeBytes.value,
+      maxSizeBytes: lastFilterMaxSizeBytes.value,
+    }
+
+    if (wizardStep.value >= 2 && !filteredResult.value && !filterLoading.value) {
+      filterLoading.value = true
+      try {
+        filteredResult.value = await api.filterAnalysis(job.jobId, req)
+      } catch { /* ignore; user can retry via Filter button */ }
+      finally { filterLoading.value = false }
+    }
+
+    if (wizardStep.value >= 3 && !runPlan.value && !prepareLoading.value) {
+      prepareLoading.value = true
+      try {
+        runPlan.value = await api.prepareRunPlan(job.jobId, req)
+      } catch { /* ignore; PreparePanel can retry */ }
+      finally { prepareLoading.value = false }
+    }
   }
 
   async function restoreCurrentJob() {
     loading.value = true
     const minDelay = new Promise(resolve => setTimeout(resolve, 400))
     try {
-      const [job] = await Promise.all([api.getCurrentJob(), minDelay])
+      const [job, wizardState] = await Promise.all([api.getCurrentJob(), api.getWizardState(), minDelay])
       if (job) {
         currentJob.value = job
         // Restore error message if the job had already failed (e.g. page reload after failure)
         error.value = job.status === 'failed' && job.error ? job.error : null
       }
+      // Restore wizard state from backend (REST fallback; WS sync may overwrite later)
+      if (wizardState) {
+        applyWizardState(wizardState)
+      }
     } finally {
       loading.value = false
     }
+    // Ensure step data is fetched now that both job result and wizard state are loaded
+    ensureStepData()
   }
 
   // Defer restore until authenticated — called from App.vue after login
@@ -233,6 +318,8 @@ export const useJobStore = defineStore('job', () => {
     loading.value = true
     try {
       currentJob.value = await api.getJob(jobId)
+      // Now that the result is loaded, fetch any step data the current wizard step requires
+      ensureStepData()
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch job result'
     } finally {
@@ -342,6 +429,10 @@ export const useJobStore = defineStore('job', () => {
       case 'cleanup_cancelled':
         isCleanupRunning.value = false
         break
+      case 'wizard_state_sync':
+      case 'wizard_state_changed':
+        applyWizardState(msg.state)
+        break
     }
   }
 
@@ -427,6 +518,7 @@ export const useJobStore = defineStore('job', () => {
     allMovies,
     allSeries,
     wizardStep,
+    analysisParams,
     filteredResult,
     filterLoading,
     filteredMovies,

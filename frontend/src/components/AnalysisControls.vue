@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, inject, onMounted, type Ref } from 'vue'
+import { ref, inject, watch, onMounted, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useJobStore } from '../stores/jobStore'
 import { useConfirm } from 'primevue/useconfirm'
@@ -13,7 +13,7 @@ import type { AnalysisRequest } from '../types/api'
 
 const store = useJobStore()
 const confirm = useConfirm()
-const { applyAutoKeep, hasCleanupHistory } = storeToRefs(store)
+const { applyAutoKeep, hasCleanupHistory, analysisParams } = storeToRefs(store)
 // Injected from App.vue; prevents starting analysis without a live WebSocket connection
 const wsConnected = inject<Ref<boolean>>('wsConnected', ref(false))
 
@@ -30,6 +30,16 @@ const addedThreshold = ref('12')      // Never-watched items added within N mont
 const preciseMatching = ref(true)     // Resolve all episodes for multi-library path matching
 const submitting = ref(false)         // True while the API call is in flight
 const cancelling = ref(false)         // True while the cancel request is in flight
+
+// Initialize form from backend wizard state (restored on page load or WS sync)
+watch(analysisParams, (params) => {
+  if (params) {
+    mode.value = params.mode
+    monthThreshold.value = String(params.monthThreshold)
+    addedThreshold.value = String(params.addedThreshold)
+    preciseMatching.value = params.preciseMatching
+  }
+}, { immediate: true })
 
 /**
  * Request job cancellation. Uses try/finally to guarantee the spinner resets

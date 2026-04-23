@@ -1,6 +1,6 @@
 import type {
   AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse, RunPlan,
-  CleanupExecuteRequest, CleanupJobResponse, CleanupReport, HistoryEntry,
+  CleanupExecuteRequest, CleanupJobResponse, CleanupReport, HistoryEntry, WizardState,
 } from '../types/api'
 import { useAuth } from './useAuth'
 
@@ -194,10 +194,34 @@ export function useApi() {
     return `${BASE_URL}/api/cleanup/report/${jobId}/download`
   }
 
+  /**
+   * Fetch the current wizard state from the backend.
+   * Returns null if no state exists yet or the request fails.
+   */
+  async function getWizardState(): Promise<WizardState | null> {
+    try {
+      return await request<WizardState>('/api/wizard')
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Partially update the wizard state on the backend.
+   * Merges the given fields into the existing state and returns the updated state.
+   */
+  async function updateWizardState(update: Partial<WizardState>): Promise<WizardState> {
+    return request('/api/wizard', {
+      method: 'PATCH',
+      body: JSON.stringify(update),
+    })
+  }
+
   return {
     postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults, filterAnalysis, prepareRunPlan,
     executeCleanup, getCleanupCurrent, getCleanupJob, cancelCleanupJob,
     getCleanupHistory, getCleanupHistoryHasData, deleteHistoryEntry, clearCleanupHistory,
     getCleanupReport, getCleanupReportDownloadUrl,
+    getWizardState, updateWizardState,
   }
 }

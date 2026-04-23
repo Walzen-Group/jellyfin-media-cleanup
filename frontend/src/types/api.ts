@@ -299,6 +299,37 @@ export interface CleanupExecuteRequest {
   seasonCleanups: SeasonCleanup[]
 }
 
+export interface AnalysisParams {
+  mode: 'all' | 'movies' | 'series'
+  monthThreshold: number
+  addedThreshold: number
+  preciseMatching: boolean
+  applyAutoKeep: boolean
+}
+
+export interface FilterSettingsState {
+  categories: string[]
+  greedy: boolean
+  mediaType: 'all' | 'movies' | 'series'
+  minSizeBytes: number
+  maxSizeBytes: number | null
+}
+
+export interface PrepareSelectionsState {
+  movieDeletions: MovieDeletion[]
+  fullSeriesDeletions: FullSeriesDeletion[]
+  seasonCleanups: SeasonCleanup[]
+}
+
+export interface WizardState {
+  step: number
+  analysisParams: AnalysisParams | null
+  filterSettings: FilterSettingsState | null
+  prepareSelections: PrepareSelectionsState | null
+  jobId: string | null
+  version: number
+}
+
 export type WebSocketMessage =
   | { type: 'job_created'; job: JobResponse }
   | { type: 'job_progress'; jobId: string; step: string; percent: number; stepIndex: number; totalSteps: number }
@@ -310,3 +341,5 @@ export type WebSocketMessage =
   | { type: 'cleanup_complete'; jobId: string }
   | { type: 'cleanup_failed'; jobId: string; error: string }
   | { type: 'cleanup_cancelled'; jobId: string }
+  | { type: 'wizard_state_sync'; state: WizardState }
+  | { type: 'wizard_state_changed'; state: WizardState }

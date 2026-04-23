@@ -25,6 +25,7 @@ from media_cleanup.server import routes
 from media_cleanup.server.cleanup_jobs import CleanupJobManager
 from media_cleanup.server.jobs import JobManager
 from media_cleanup.server.websocket import ConnectionManager
+from media_cleanup.server.wizard_state import WizardStateManager
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +74,17 @@ def create_app() -> FastAPI:
     db = Database(config.db_path)
     cleanup_manager = CleanupJobManager(config=config, db=db)
     ws_manager = ConnectionManager()
+    wizard_manager = WizardStateManager()
 
     # Wire broadcast: workers -> websocket clients
     manager.set_broadcast(ws_manager.broadcast_sync)
     cleanup_manager.set_broadcast(ws_manager.broadcast_sync)
+    wizard_manager.set_broadcast(ws_manager.broadcast_sync)
 
     # Inject shared instances into routes module
     routes.job_manager = manager
     routes.cleanup_manager = cleanup_manager
+    routes.wizard_manager = wizard_manager
     routes.db = db
 
     # Public auth config endpoint (no auth required)
@@ -116,6 +120,8 @@ def create_app() -> FastAPI:
         logger.info("WebSocket connection request from %s", ws.client)
         await ws_manager.connect(ws)
         logger.info("WebSocket client connected: %s", ws.client)
+        # Send current wizard state to the newly connected client
+        await ws_manager.send_to(ws, wizard_manager.get_sync_message())
         try:
             # Keep the connection open; client can send pings
             while True:

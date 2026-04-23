@@ -28,12 +28,20 @@ from media_cleanup.models import (
 )
 from media_cleanup.server.cleanup_jobs import CleanupJob, CleanupJobManager
 from media_cleanup.server.jobs import Job, JobManager
+from media_cleanup.server.wizard_state import (
+    AnalysisParams,
+    FilterSettings,
+    PrepareSelections,
+    WizardStateManager,
+    WizardStateUpdate,
+)
 
 router = APIRouter(prefix="/api")
 
 # Populated by app.py at startup
 job_manager: JobManager | None = None
 cleanup_manager: CleanupJobManager | None = None
+wizard_manager: WizardStateManager | None = None
 db: Database | None = None
 
 
@@ -50,6 +58,11 @@ def _cleanup_manager() -> CleanupJobManager:
 def _db() -> Database:
     assert db is not None, "Database not initialized"
     return db
+
+
+def _wizard() -> WizardStateManager:
+    assert wizard_manager is not None, "WizardStateManager not initialized"
+    return wizard_manager
 
 
 def _cleanup_job_to_response(job: CleanupJob) -> CleanupJobResponse:
@@ -84,6 +97,20 @@ def _job_to_response(job: Job) -> JobResponse:
 def create_analysis(request: AnalysisRequest) -> JobResponse:
     """Submit a new analysis job. Returns immediately with 202."""
     job = _manager().submit(request)
+    # Sync wizard state: store analysis params, reset downstream state
+    _wizard().update(
+        step=1,
+        analysis_params=AnalysisParams(
+            mode=request.mode,
+            month_threshold=request.month_threshold,
+            added_threshold=request.added_threshold,
+            precise_matching=request.precise_matching,
+            apply_auto_keep=request.apply_auto_keep,
+        ),
+        filter_settings=FilterSettings(),
+        prepare_selections=PrepareSelections(),
+        job_id=job.job_id,
+    )
     return _job_to_response(job)
 
 
@@ -132,6 +159,16 @@ def filter_analysis(job_id: str, request: FilterRequest) -> dict:
         raise HTTPException(status_code=400, detail="Job has no result")
 
     filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type, request.min_size_bytes, request.max_size_bytes)
+    # Sync wizard state: store filter settings
+    _wizard().update(
+        filter_settings=FilterSettings(
+            categories=list(request.categories),
+            greedy=request.greedy,
+            media_type=request.media_type,
+            min_size_bytes=request.min_size_bytes,
+            max_size_bytes=request.max_size_bytes,
+        ),
+    )
     return filtered.model_dump(by_alias=True)
 
 
@@ -166,12 +203,36 @@ def cancel_analysis(job_id: str) -> dict:
 def clear_all() -> dict:
     """Clear all completed jobs (keeps running/queued)."""
     _manager().clear_completed()
+    _wizard().reset()
     return {"status": "cleared"}
 
 
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+# ------------------------------------------------------------------
+#  Wizard state endpoints
+# ------------------------------------------------------------------
+
+@router.get("/wizard")
+def get_wizard_state() -> dict:
+    """Return current wizard state (REST fallback for initial page load)."""
+    return _wizard().get_state().model_dump(by_alias=True)
+
+
+@router.patch("/wizard")
+def update_wizard_state(body: WizardStateUpdate) -> dict:
+    """Partial update of wizard state. Broadcasts change to all WS clients."""
+    state = _wizard().update(
+        step=body.step,
+        analysis_params=body.analysis_params,
+        filter_settings=body.filter_settings,
+        prepare_selections=body.prepare_selections,
+        job_id=body.job_id,
+    )
+    return state.model_dump(by_alias=True)
 
 
 # ------------------------------------------------------------------
@@ -206,6 +267,7 @@ def execute_cleanup(request: CleanupExecuteRequest) -> CleanupJobResponse:
     )
 
     job = _cleanup_manager().submit(run_plan, simulate=request.simulate)
+    _wizard().update(step=4)
     return _cleanup_job_to_response(job)
 
 

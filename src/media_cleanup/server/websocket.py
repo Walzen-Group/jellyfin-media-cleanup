@@ -53,3 +53,16 @@ class ConnectionManager:
         if self._loop is None or not self.active_connections:
             return
         asyncio.run_coroutine_threadsafe(self.broadcast(message), self._loop)
+
+    async def send_to(self, ws: WebSocket, message: dict[str, Any]) -> None:
+        """Send a JSON message to a single WebSocket client."""
+        try:
+            await ws.send_text(json.dumps(message))
+        except Exception:
+            self.disconnect(ws)
+
+    def send_to_sync(self, ws: WebSocket, message: dict[str, Any]) -> None:
+        """Thread-safe single-client send - schedules send_to on the event loop."""
+        if self._loop is None:
+            return
+        asyncio.run_coroutine_threadsafe(self.send_to(ws, message), self._loop)
