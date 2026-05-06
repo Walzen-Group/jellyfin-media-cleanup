@@ -1,6 +1,6 @@
 import type {
   AnalysisRequest, FilterRequest, FilteredResult, FullJobResponse, JobResponse, RunPlan,
-  CleanupExecuteRequest, CleanupJobResponse, CleanupReport, HistoryEntry, WizardState,
+  CleanupExecuteRequest, CleanupJobResponse, CleanupReport, HistoryPage, WizardState,
 } from '../types/api'
 import { useAuth } from './useAuth'
 
@@ -153,10 +153,18 @@ export function useApi() {
   }
 
   /**
-   * Fetch all deletion history entries.
+   * Fetch a paginated page of deletion history entries.
+   * q: optional case-insensitive title substring filter (omit or empty = no filter).
+   * Backend strips empty strings to None, so omitting and passing "" are equivalent.
+   * limit: page size (1-500, default 50). offset: zero-based row offset (default 0).
    */
-  async function getCleanupHistory(): Promise<HistoryEntry[]> {
-    return request('/api/cleanup/history')
+  async function getCleanupHistory(limit = 50, offset = 0, q = ''): Promise<HistoryPage> {
+    const params = new URLSearchParams()
+    params.set('limit', String(limit))
+    params.set('offset', String(offset))
+    // Only send q when non-empty - backend accepts empty string too, but omitting is cleaner
+    if (q.trim()) params.set('q', q.trim())
+    return request(`/api/cleanup/history?${params.toString()}`)
   }
 
   /**
@@ -188,10 +196,30 @@ export function useApi() {
   }
 
   /**
-   * Returns the URL for downloading the YAML report. Navigate directly.
+   * Fetch the YAML cleanup report as a Blob for programmatic download.
+   * Uses the same auth-bearing request wrapper so the Authorization header
+   * is attached - unlike window.location.href which cannot carry custom headers.
+   * Throws with a user-readable message on 401/non-2xx so callers can surface the error.
    */
-  function getCleanupReportDownloadUrl(jobId: string): string {
-    return `${BASE_URL}/api/cleanup/report/${jobId}/download`
+  async function fetchCleanupReportBlob(jobId: string): Promise<Blob> {
+    const { getAccessToken } = useAuth()
+    const token = getAccessToken()
+    const headers: Record<string, string> = {
+      'Accept': 'application/x-yaml, text/yaml, */*',
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    const res = await fetch(`${BASE_URL}/api/cleanup/report/${jobId}/download`, { headers })
+    if (res.status === 401) {
+      const { clearSession } = useAuth()
+      await clearSession()
+      throw new Error('Authentication expired. Please log in again.')
+    }
+    if (!res.ok) {
+      throw new Error(`Download failed: ${res.status} ${res.statusText}`)
+    }
+    return res.blob()
   }
 
   /**
@@ -221,7 +249,7 @@ export function useApi() {
     postAnalysis, getJob, listJobs, cancelJob, getCurrentJob, clearResults, filterAnalysis, prepareRunPlan,
     executeCleanup, getCleanupCurrent, getCleanupJob, cancelCleanupJob,
     getCleanupHistory, getCleanupHistoryHasData, deleteHistoryEntry, clearCleanupHistory,
-    getCleanupReport, getCleanupReportDownloadUrl,
+    getCleanupReport, fetchCleanupReportBlob,
     getWizardState, updateWizardState,
   }
 }

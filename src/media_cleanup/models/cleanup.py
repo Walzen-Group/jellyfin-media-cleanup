@@ -45,6 +45,12 @@ class HistoryEntry(_Base):
     simulated: bool = False
 
 
+class HistoryPage(_Base):
+    """Paginated history response."""
+    items: list[HistoryEntry]
+    total: int
+
+
 class CleanupExecuteRequest(_Base):
     """Request body to start a cleanup execution with user-selected items."""
     simulate: bool = True

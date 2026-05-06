@@ -241,18 +241,27 @@ class CleanupExecutor:
 
         if not self._simulate:
             try:
-                files = sonarr.get_episode_files(cleanup.sonarr_series_id)
+                try:
+                    files = sonarr.get_episode_files(cleanup.sonarr_series_id)
+                except Exception as exc:
+                    raise RuntimeError(f"fetch failed: {exc}") from exc
                 season_files = [f for f in files if f.season_number in cleanup.season_numbers]
                 if season_files:
-                    sonarr.delete_episode_files_bulk([f.id for f in season_files])
+                    try:
+                        sonarr.delete_episode_files_bulk([f.id for f in season_files])
+                    except Exception as exc:
+                        raise RuntimeError(f"delete failed: {exc}") from exc
                 for sn in cleanup.season_numbers:
-                    sonarr.unmonitor_season(cleanup.sonarr_series_id, sn)
+                    try:
+                        sonarr.unmonitor_season(cleanup.sonarr_series_id, sn)
+                    except Exception as exc:
+                        raise RuntimeError(f"unmonitor failed (season {sn}): {exc}") from exc
                 verified = self._verify_season_cleaned(
                     sonarr, cleanup.sonarr_series_id, cleanup.season_numbers
                 )
                 status = CleanupEntryStatus.DELETED if verified else CleanupEntryStatus.FAILED
                 if not verified:
-                    error = "Season files still present after deletion"
+                    error = "verify failed: season files still present after deletion"
             except Exception as exc:
                 status = CleanupEntryStatus.FAILED
                 error = str(exc)

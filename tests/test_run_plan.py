@@ -9,8 +9,6 @@ Key scenarios:
 - Series with total_season_count=0 (lookup miss) should fall back to full deletion
 """
 
-import pytest
-
 from media_cleanup.models import (
     build_run_plan,
     FilteredResult,
@@ -175,6 +173,64 @@ class TestBuildRunPlan:
         assert len(plan.movies) == 1
         assert plan.movies[0].radarr_id == 123
         assert plan.movies[0].title == "Inception"
+
+    # ------------------------------------------------------------------
+    #  greedy flag semantics
+    # ------------------------------------------------------------------
+
+    def test_greedy_false_all_seasons_present_is_full_deletion(self):
+        """greedy=False + all seasons covered -> FullSeriesDeletion."""
+        sg = _make_series(
+            "Euphoria",
+            sonarr_id=200,
+            seasons=[(1, "old", 5_000_000_000), (2, "old", 6_000_000_000)],
+            total_season_count=2,
+        )
+        plan = build_run_plan(_make_filtered([sg]), greedy=False)
+
+        assert len(plan.full_series) == 1
+        assert len(plan.season_cleanups) == 0
+        assert plan.full_series[0].title == "Euphoria"
+
+    def test_greedy_false_partial_seasons_drops_series(self):
+        """greedy=False + only some seasons eligible -> series is dropped entirely."""
+        sg = _make_series(
+            "Euphoria",
+            sonarr_id=200,
+            seasons=[(2, "old", 6_000_000_000)],  # only season 2 in filtered set
+            total_season_count=2,  # but 2 seasons exist on disk
+        )
+        plan = build_run_plan(_make_filtered([sg]), greedy=False)
+
+        assert len(plan.full_series) == 0
+        assert len(plan.season_cleanups) == 0
+
+    def test_greedy_false_unknown_total_drops_series(self):
+        """greedy=False + total_season_count==0 (lookup miss) -> dropped (conservative)."""
+        sg = _make_series(
+            "Kakegurui",
+            sonarr_id=201,
+            seasons=[(1, "old", 3_000_000_000)],
+            total_season_count=0,  # unknown
+        )
+        plan = build_run_plan(_make_filtered([sg]), greedy=False)
+
+        assert len(plan.full_series) == 0
+        assert len(plan.season_cleanups) == 0
+
+    def test_greedy_true_partial_seasons_is_season_cleanup(self):
+        """greedy=True + partial coverage -> SeasonCleanup (existing behaviour preserved)."""
+        sg = _make_series(
+            "Top Gear US",
+            sonarr_id=202,
+            seasons=[(1, "old", 4_000_000_000)],
+            total_season_count=3,
+        )
+        plan = build_run_plan(_make_filtered([sg]), greedy=True)
+
+        assert len(plan.full_series) == 0
+        assert len(plan.season_cleanups) == 1
+        assert plan.season_cleanups[0].title == "Top Gear US"
 
     def test_summary_counts_and_size(self):
         """Summary should correctly count items and sum sizes."""

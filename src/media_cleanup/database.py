@@ -5,7 +5,6 @@ Records every deletion (real or simulated) immediately after it is confirmed,
 so that partial runs are fully preserved on cancellation or failure.
 """
 
-import json
 import sqlite3
 from pathlib import Path
 
@@ -102,6 +101,39 @@ class Database:
                 "SELECT * FROM deleted_media ORDER BY deleted_at DESC"
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def list_paged(
+        self,
+        limit: int,
+        offset: int,
+        q: str | None = None,
+    ) -> tuple[list[dict], int]:
+        """Return a page of history rows and the total matching count.
+
+        Args:
+            limit: Maximum rows to return.
+            offset: Number of rows to skip.
+            q: Optional case-insensitive substring to match against title.
+
+        Returns:
+            (rows, total) where total is the count of all matching rows.
+        """
+        where = ""
+        params: list[object] = []
+        if q:
+            where = "WHERE title LIKE '%' || ? || '%' COLLATE NOCASE"
+            params.append(q)
+
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            total: int = conn.execute(
+                f"SELECT COUNT(*) FROM deleted_media {where}", params
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT * FROM deleted_media {where} ORDER BY deleted_at DESC LIMIT ? OFFSET ?",
+                [*params, limit, offset],
+            ).fetchall()
+        return [dict(r) for r in rows], total
 
     def get_paths_set(self) -> set[str]:
         """Return the set of all recorded library paths (for auto-keep detection)."""

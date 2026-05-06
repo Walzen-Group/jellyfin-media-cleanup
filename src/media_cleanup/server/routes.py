@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from media_cleanup.database import Database
@@ -18,6 +18,7 @@ from media_cleanup.models import (
     CleanupReport,
     FilterRequest,
     HistoryEntry,
+    HistoryPage,
     JobResponse,
     JobStatus,
     RunPlan,
@@ -182,7 +183,7 @@ def prepare_run_plan(job_id: str, request: FilterRequest) -> RunPlan:
         raise HTTPException(status_code=400, detail="Job has no result")
 
     filtered = filter_analysis_result(job.result, request.categories, request.greedy, request.media_type, request.min_size_bytes, request.max_size_bytes)
-    plan = build_run_plan(filtered, categories=request.categories)
+    plan = build_run_plan(filtered, categories=request.categories, greedy=request.greedy)
     job.run_plan = plan
     return plan
 
@@ -301,31 +302,47 @@ def cancel_cleanup_job(job_id: str) -> dict:
     return {"status": "cancelling", "jobId": job_id}
 
 
+def _row_to_history_entry(row: dict) -> HistoryEntry:
+    season_numbers = None
+    if row.get("season_numbers"):
+        try:
+            season_numbers = json.loads(row["season_numbers"])
+        except (ValueError, TypeError):
+            season_numbers = None
+    return HistoryEntry(
+        id=row["id"],
+        path=row["path"],
+        media_type=row["media_type"],
+        title=row["title"],
+        sonarr_id=row.get("sonarr_id"),
+        radarr_id=row.get("radarr_id"),
+        season_numbers=season_numbers,
+        deleted_at=row["deleted_at"],
+        size_bytes=row.get("size_bytes", 0),
+        simulated=bool(row.get("simulated", 0)),
+    )
+
+
 @router.get("/cleanup/history")
-def get_cleanup_history() -> list[HistoryEntry]:
-    """Return all cleanup history rows, newest first."""
-    rows = _db().list_all()
-    entries: list[HistoryEntry] = []
-    for row in rows:
-        season_numbers = None
-        if row.get("season_numbers"):
-            try:
-                season_numbers = json.loads(row["season_numbers"])
-            except (ValueError, TypeError):
-                season_numbers = None
-        entries.append(HistoryEntry(
-            id=row["id"],
-            path=row["path"],
-            media_type=row["media_type"],
-            title=row["title"],
-            sonarr_id=row.get("sonarr_id"),
-            radarr_id=row.get("radarr_id"),
-            season_numbers=season_numbers,
-            deleted_at=row["deleted_at"],
-            size_bytes=row.get("size_bytes", 0),
-            simulated=bool(row.get("simulated", 0)),
-        ))
-    return entries
+def get_cleanup_history(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    q: str | None = Query(default=None),
+) -> HistoryPage:
+    """Return a paged list of cleanup history rows, newest first.
+
+    Query params:
+        limit: Max rows to return (1-500, default 50).
+        offset: Rows to skip (default 0).
+        q: Case-insensitive title substring filter.
+
+    Response shape changed from bare list to {items, total}.
+    """
+    rows, total = _db().list_paged(limit=limit, offset=offset, q=q or None)
+    return HistoryPage(
+        items=[_row_to_history_entry(r) for r in rows],
+        total=total,
+    )
 
 
 @router.get("/cleanup/history/has-data")

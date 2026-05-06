@@ -53,7 +53,11 @@ class RunPlan(_Base):
     summary: RunPlanSummary = RunPlanSummary()
 
 
-def build_run_plan(filtered: FilteredResult, categories: Sequence[str] | None = None) -> RunPlan:
+def build_run_plan(
+    filtered: FilteredResult,
+    categories: Sequence[str] | None = None,
+    greedy: bool = True,
+) -> RunPlan:
     """Build a dry-run deletion plan from a filtered result.
 
     Determines which Radarr/Sonarr API calls would be needed to delete
@@ -65,6 +69,12 @@ def build_run_plan(filtered: FilteredResult, categories: Sequence[str] | None = 
         categories: Active category filters (e.g. ["old", "never"]). When provided,
             only seasons whose status matches are considered for the plan.
             When None, all seasons in the filtered result are used.
+        greedy: When True (default), partial season cleanups are emitted for shows
+            where only some seasons are eligible. When False, only full-series
+            deletions are emitted -- any show that doesn't cover all on-disk seasons
+            is dropped entirely. greedy=False also conservatively drops shows where
+            total_season_count is 0 (unknown total) because we cannot confirm full
+            coverage.
     """
     movie_deletions: list[MovieDeletion] = []
     full_series_deletions: list[FullSeriesDeletion] = []
@@ -89,38 +99,50 @@ def build_run_plan(filtered: FilteredResult, categories: Sequence[str] | None = 
         eligible = [sn for sn in sg.seasons if sn.status in categories] if categories else sg.seasons
         filtered_season_numbers = sorted(sn.season_number for sn in eligible)
 
-        # Compare filtered seasons against the total on-disk seasons from Sonarr.
-        # If total_season_count is 0 (lookup missed), we cannot determine full vs partial,
-        # so fall back to treating it as a full deletion when there are seasons present.
-        total = sg.total_season_count
-        all_seasons_present = (
-            len(filtered_season_numbers) > 0
-            and (total == 0 or len(filtered_season_numbers) >= total)
-        )
+        if not filtered_season_numbers:
+            continue
 
-        if all_seasons_present:
-            full_series_deletions.append(FullSeriesDeletion(
-                sonarr_series_id=sg.sonarr_series_id,
-                title=sg.title,
-                library_path=sg.library_path or "",
-                size_bytes=sg.size_bytes,
-                season_count=sg.total_season_count,
-            ))
-        elif filtered_season_numbers:
-            episode_file_count = sum(
-                sn.total_episodes for sn in eligible
-            )
-            total_episode_count = sum(sn.total_episodes for sn in sg.seasons)
-            season_cleanups.append(SeasonCleanup(
-                sonarr_series_id=sg.sonarr_series_id,
-                title=sg.title,
-                library_path=sg.library_path or "",
-                season_numbers=filtered_season_numbers,
-                total_size_bytes=sg.size_bytes,
-                episode_file_count=episode_file_count,
-                total_season_count=sg.total_season_count,
-                total_episode_count=total_episode_count,
-            ))
+        # Compare filtered seasons against the total on-disk seasons from Sonarr.
+        # total == 0 means the Sonarr lookup missed; we cannot confirm full coverage.
+        total = sg.total_season_count
+        all_seasons_present = total > 0 and len(filtered_season_numbers) >= total
+
+        if greedy:
+            # greedy=True: full deletion when all seasons present (or unknown total
+            # as a best-effort fallback); partial cleanup otherwise.
+            if total == 0 or all_seasons_present:
+                full_series_deletions.append(FullSeriesDeletion(
+                    sonarr_series_id=sg.sonarr_series_id,
+                    title=sg.title,
+                    library_path=sg.library_path or "",
+                    size_bytes=sg.size_bytes,
+                    season_count=sg.total_season_count,
+                ))
+            else:
+                episode_file_count = sum(sn.total_episodes for sn in eligible)
+                total_episode_count = sum(sn.total_episodes for sn in sg.seasons)
+                season_cleanups.append(SeasonCleanup(
+                    sonarr_series_id=sg.sonarr_series_id,
+                    title=sg.title,
+                    library_path=sg.library_path or "",
+                    season_numbers=filtered_season_numbers,
+                    total_size_bytes=sg.size_bytes,
+                    episode_file_count=episode_file_count,
+                    total_season_count=sg.total_season_count,
+                    total_episode_count=total_episode_count,
+                ))
+        else:
+            # greedy=False: only emit full-series deletions. Partial coverage and
+            # unknown totals (total == 0) are both dropped -- we cannot confirm
+            # the user is cleaning up the entire show.
+            if all_seasons_present:
+                full_series_deletions.append(FullSeriesDeletion(
+                    sonarr_series_id=sg.sonarr_series_id,
+                    title=sg.title,
+                    library_path=sg.library_path or "",
+                    size_bytes=sg.size_bytes,
+                    season_count=sg.total_season_count,
+                ))
 
     total_size = (
         sum(md.size_bytes for md in movie_deletions)

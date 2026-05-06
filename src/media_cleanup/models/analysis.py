@@ -7,7 +7,6 @@ from typing import Any
 
 from media_cleanup.matching import MatchResult, normalize_title
 from media_cleanup.schema.radarr_schema import Movie
-from media_cleanup.schema.sonarr_schema import Series
 from media_cleanup.service import CleanupResult
 from media_cleanup.types import MatchMethod, MediaMode, MediaStatus, SeasonSummary
 

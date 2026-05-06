@@ -92,9 +92,34 @@ function backToAnalysis() {
   store.setWizardStep(1)
 }
 
-function downloadReport() {
-  if (cleanupJobId.value) {
-    window.location.href = api.getCleanupReportDownloadUrl(cleanupJobId.value)
+// Track download state so the button can show a spinner and errors can surface
+const downloadError = ref<string | null>(null)
+const isDownloading = ref(false)
+
+/**
+ * Fetch the YAML report as a Blob via the auth-bearing API wrapper, then
+ * trigger a browser download. Using fetch (not window.location.href) is
+ * required so the Authorization header is included - direct navigation
+ * cannot carry custom headers and results in a 401.
+ */
+async function downloadReport() {
+  if (!cleanupJobId.value) return
+  downloadError.value = null
+  isDownloading.value = true
+  try {
+    const blob = await api.fetchCleanupReportBlob(cleanupJobId.value)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cleanup-report-${cleanupJobId.value}.yaml`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    downloadError.value = e instanceof Error ? e.message : 'Download failed'
+  } finally {
+    isDownloading.value = false
   }
 }
 
@@ -216,7 +241,8 @@ onMounted(() => {
             />
             <span class="flex-1 truncate" :title="entry.title">{{ entry.title }}</span>
             <Tag :value="entry.mediaType" :severity="mediaTypeSeverity(entry.mediaType)" class="shrink-0 text-xs" />
-            <span class="text-surface-400 text-xs shrink-0">{{ formatSize(entry.sizeBytes) }}</span>
+            <!-- sizeBytes is absent on live WS progress entries - only present on completed report entries -->
+            <span v-if="entry.sizeBytes != null" class="text-surface-400 text-xs shrink-0">{{ formatSize(entry.sizeBytes) }}</span>
             <Tag :value="entry.status" :severity="statusSeverity(entry.status)" class="shrink-0 text-xs" />
           </div>
           <div v-if="cleanupLog.length === 0" class="text-surface-400 text-sm text-center py-4">
@@ -278,11 +304,18 @@ onMounted(() => {
           </div>
         </div>
 
+        <!-- Download error shown inline below the buttons so it doesn't lose context -->
+        <div v-if="downloadError" class="text-sm text-red-500 flex items-center gap-1.5">
+          <i class="pi pi-exclamation-circle shrink-0" />
+          {{ downloadError }}
+        </div>
+
         <div class="flex gap-3">
           <Button
-            label="Download Report (YAML)"
-            icon="pi pi-download"
+            :label="isDownloading ? 'Downloading...' : 'Download Report (YAML)'"
+            :icon="isDownloading ? 'pi pi-spin pi-spinner' : 'pi pi-download'"
             severity="secondary"
+            :disabled="isDownloading"
             @click="downloadReport"
           />
           <Button

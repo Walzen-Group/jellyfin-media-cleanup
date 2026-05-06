@@ -188,16 +188,16 @@ class CustomFormat(_Base):
 
 
 class MediaInfoResource(_Base):
-    id: int
+    id: int | None = None
     audio_bitrate: int = 0
-    audio_channels: int = 0
+    audio_channels: float = 0.0
     audio_codec: str = ""
     audio_languages: str = ""
     audio_stream_count: int = 0
     video_bit_depth: int = 0
     video_bitrate: int = 0
     video_codec: str = ""
-    video_fps: int = 0
+    video_fps: float = 0.0
     video_dynamic_range: str = ""
     video_dynamic_range_type: str = ""
     resolution: str = ""

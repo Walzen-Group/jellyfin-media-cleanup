@@ -253,7 +253,8 @@ export interface CleanupLogEntry {
   path: string
   status: CleanupEntryStatus
   error?: string
-  sizeBytes: number
+  /** Optional: present on completed report entries but absent on live WS progress entries */
+  sizeBytes?: number
   verified: boolean
 }
 
@@ -290,6 +291,15 @@ export interface HistoryEntry {
   deletedAt: string
   sizeBytes: number
   simulated: boolean
+}
+
+/**
+ * Paginated response from GET /api/cleanup/history.
+ * items: the current page of entries; total: total matching records (for pagination controls).
+ */
+export interface HistoryPage {
+  items: HistoryEntry[]
+  total: number
 }
 
 export interface CleanupExecuteRequest {
@@ -337,7 +347,7 @@ export type WebSocketMessage =
   | { type: 'job_cancelled'; jobId: string }
   | { type: 'job_failed'; jobId: string; error: string }
   | { type: 'cleanup_started'; jobId: string; simulate: boolean; totalItems: number }
-  | { type: 'cleanup_progress'; jobId: string; itemIndex: number; totalItems: number; title: string; mediaType: CleanupMediaType; status: CleanupEntryStatus; sizeBytes: number }
+  | { type: 'cleanup_progress'; jobId: string; itemIndex: number; totalItems: number; title: string; mediaType: CleanupMediaType; status: CleanupEntryStatus; sizeBytes?: number }
   | { type: 'cleanup_complete'; jobId: string }
   | { type: 'cleanup_failed'; jobId: string; error: string }
   | { type: 'cleanup_cancelled'; jobId: string }
