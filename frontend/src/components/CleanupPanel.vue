@@ -299,7 +299,7 @@ onMounted(() => {
             />
             <span class="flex-1 truncate" :title="entry.title">{{ entry.title }}</span>
             <Tag :value="entry.mediaType" :severity="mediaTypeSeverity(entry.mediaType)" class="shrink-0 text-xs" />
-            <span class="text-surface-400 text-xs shrink-0">{{ formatSize(entry.sizeBytes) }}</span>
+            <span class="text-surface-400 text-xs shrink-0">{{ formatSize(entry.sizeBytes ?? 0) }}</span>
             <Tag :value="entry.status" :severity="statusSeverity(entry.status)" class="shrink-0 text-xs" />
           </div>
         </div>

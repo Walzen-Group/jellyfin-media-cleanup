@@ -8,7 +8,7 @@
   resets offset to 0 so the user always sees results from the first page.
 -->
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useJobStore } from '../stores/jobStore'
 import { useApi } from '../composables/useApi'
