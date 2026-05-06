@@ -212,6 +212,36 @@ def _build_all_series_groups(
         if series.path in watched_paths:
             continue
 
+        # Keep tag must take precedence over the never bucket so a tagged
+        # series can't be picked up by never-watched deletion criteria.
+        if series.path in result.kept_series_paths:
+            kept_season_count = len([
+                sn for sn in series.seasons
+                if sn.season_number > 0 and sn.statistics.size_on_disk > 0
+            ])
+            groups.append(SeriesGroup(
+                title=series.title,
+                library_path=series.path,
+                status=MediaStatus.KEPT,
+                added=series.added,
+                size_bytes=series.statistics.size_on_disk,
+                sonarr_series_id=series.id,
+                total_season_count=kept_season_count,
+                seasons=[
+                    SeasonInfo(
+                        season_number=sn.season_number,
+                        last_played="",
+                        episode_count=0,
+                        total_episodes=sn.statistics.total_episode_count,
+                        size_bytes=sn.statistics.size_on_disk,
+                        status=MediaStatus.KEPT,
+                    )
+                    for sn in series.seasons
+                    if sn.season_number > 0
+                ],
+            ))
+            continue
+
         norm = normalize_title(series.title)
         if norm in unmatched_by_norm:
             ug = unmatched_by_norm[norm]
@@ -295,14 +325,22 @@ def cleanup_result_to_response(
     watched_movie_paths = {m.matched_path for m in all_matches if m.matched_path}
     never_movies: list[MovieMatch] = []
     never_new_movies: list[MovieMatch] = []
+    # Movies that exist in Radarr with the keep tag but were never watched.
+    # The keep tag must take precedence over the never bucket so they are
+    # not eligible for the never-watched deletion criteria.
+    kept_never_movies: list[MovieMatch] = []
     for m in result.all_movies:
-        if m.path not in watched_movie_paths:
-            status = _never_status(m.added, added_threshold)
-            match = _movie_to_match(m, status=status)
-            if status == MediaStatus.NEVER_NEW:
-                never_new_movies.append(match)
-            else:
-                never_movies.append(match)
+        if m.path in watched_movie_paths:
+            continue
+        if m.path in result.kept_movie_paths:
+            kept_never_movies.append(_movie_to_match(m, status=MediaStatus.KEPT))
+            continue
+        status = _never_status(m.added, added_threshold)
+        match = _movie_to_match(m, status=status)
+        if status == MediaStatus.NEVER_NEW:
+            never_new_movies.append(match)
+        else:
+            never_movies.append(match)
 
     # Series -- unified: one entry per show, placed in one category by status
     all_series_groups = _build_all_series_groups(result, added_threshold)
@@ -383,7 +421,7 @@ def cleanup_result_to_response(
             series=series_by_cat.get("old", []),
         ),
         keep=MediaSection(
-            movies=[match_result_to_model(m, status=MediaStatus.KEPT) for m in result.kept_movie_matches] + [match_result_to_model(m, status=MediaStatus.AUTO_KEEP) for m in result.auto_kept_movies],
+            movies=[match_result_to_model(m, status=MediaStatus.KEPT) for m in result.kept_movie_matches] + kept_never_movies + [match_result_to_model(m, status=MediaStatus.AUTO_KEEP) for m in result.auto_kept_movies],
             series=series_by_cat.get("kept", []) + auto_keep_series,
         ),
         collision=MediaSection(

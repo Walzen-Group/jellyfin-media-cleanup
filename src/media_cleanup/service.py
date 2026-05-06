@@ -55,6 +55,8 @@ class CleanupResult:
     auto_kept_seasons: list[SeasonSummary] = field(default_factory=list)
     all_movies: list[Movie] = field(default_factory=list)
     all_series: list[Series] = field(default_factory=list)
+    kept_movie_paths: set[str] = field(default_factory=set)
+    kept_series_paths: set[str] = field(default_factory=set)
     episodes: list[EpisodeInfo] = field(default_factory=list)
     episode_dates: dict = field(default_factory=dict)
 
@@ -160,6 +162,7 @@ class CleanupService:
             cb("Fetching Radarr library", 1, 1)
 
             kept_movie_paths = {m.path for m in kept_movies}
+            result.kept_movie_paths = kept_movie_paths
 
             self._check_cancel(cancel_check)
 
@@ -239,6 +242,7 @@ class CleanupService:
             cb("Fetching Sonarr library", 1, 1)
 
             kept_series_paths = {s.path for s in kept_series}
+            result.kept_series_paths = kept_series_paths
 
             self._check_cancel(cancel_check)
 

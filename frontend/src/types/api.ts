@@ -177,7 +177,7 @@ export interface SeriesRow extends SeriesGroup {
 }
 
 export interface FilterRequest {
-  categories: string[]  // "old" | "never" | "never_new"
+  categories: string[]  // "old" | "never" | "never_new" | "unmatched"
   greedy: boolean
   mediaType?: 'all' | 'movies' | 'series'  // default: "all"
   minSizeBytes?: number

@@ -47,7 +47,7 @@ class CleanupEntryStatus(StrEnum):
 
 
 MediaMode = Literal["all", "movies", "series"]
-FilterCategory = Literal["old", "never", "never_new"]
+FilterCategory = Literal["old", "never", "never_new", "unmatched"]
 
 
 @dataclass

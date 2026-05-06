@@ -69,6 +69,9 @@ const categoryOptions = [
   { label: 'Not recently watched', value: 'old', dot: 'bg-rose-400/70 dark:bg-rose-400/60' },
   { label: 'Never watched', value: 'never', dot: 'bg-purple-400/70 dark:bg-purple-400/60' },
   { label: 'New (unwatched)', value: 'never_new', dot: 'bg-cyan-400/70 dark:bg-cyan-400/60' },
+  // "unmatched" items have no library entry; user can opt in to include them for pruning
+  // zinc-400/500 gives a neutral grey that sits visibly above surface card backgrounds in both light and dark mode
+  { label: 'Unmatched', value: 'unmatched', dot: 'bg-zinc-400/70 dark:bg-zinc-500/70' },
 ]
 
 async function filter() {

@@ -62,7 +62,9 @@ def filter_analysis_result(
         "old": result.not_recently_watched,
         "never": result.never_watched,
         "never_new": result.never_new,
+        "unmatched": result.unmatched,
     }
+    unmatched_selected = "unmatched" in categories
 
     movies: list[MovieMatch] = []
     series: list[SeriesGroup] = []
@@ -71,24 +73,28 @@ def filter_analysis_result(
         section = section_map.get(cat)
         if section is None:
             continue
-        movies.extend(m for m in section.movies if m.status != MediaStatus.UNMATCHED)
+        # When the unmatched category is opted in, UNMATCHED-status items are
+        # legitimate prune targets; otherwise keep the historical safety filter.
+        for m in section.movies:
+            if m.status == MediaStatus.UNMATCHED and not unmatched_selected:
+                continue
+            movies.append(m)
         for s in section.series:
-            if s.status == MediaStatus.UNMATCHED:
+            if s.status == MediaStatus.UNMATCHED and not unmatched_selected:
                 continue
             if not greedy and s.status == MediaStatus.MIXED:
                 continue
-            # Filter out unmatched seasons and recalculate size
-            eligible_seasons = [
-                sn for sn in s.seasons
-                if sn.status != MediaStatus.UNMATCHED and sn.status in categories
-            ]
+            eligible_seasons = [sn for sn in s.seasons if sn.status in categories]
             if not eligible_seasons:
                 continue
             matching_size = sum(sn.size_bytes for sn in eligible_seasons)
-            # Keep all non-unmatched seasons so the frontend can grey out
-            # non-matching ones via activeCategories. Only recalculate size
-            # from the eligible seasons.
-            all_visible_seasons = [sn for sn in s.seasons if sn.status != MediaStatus.UNMATCHED]
+            # Keep all seasons visible so the frontend can grey out non-matching
+            # ones via activeCategories. Only recalculate size from eligible.
+            all_visible_seasons = (
+                list(s.seasons)
+                if unmatched_selected
+                else [sn for sn in s.seasons if sn.status != MediaStatus.UNMATCHED]
+            )
             series.append(s.model_copy(update={
                 "size_bytes": matching_size,
                 "seasons": all_visible_seasons,
