@@ -276,9 +276,26 @@ export const useJobStore = defineStore('job', () => {
   // Defer restore until authenticated - called from App.vue after login
   // restoreCurrentJob() is exposed and called externally
 
+  /**
+   * Reset all cleanup execution state to initial values.
+   * Called before starting a new analysis so that CleanupPanel (step 4) does not
+   * inherit stale "complete" or "running" state from a previous run.
+   * Does NOT clear hasCleanupHistory - that flag reflects backend history, not live state.
+   */
+  function resetCleanupState() {
+    cleanupJobId.value = null
+    cleanupReport.value = null
+    isCleanupRunning.value = false
+    cleanupTotalItems.value = 0
+    cleanupLog.value = []
+    // Keep cleanupSimulate at its current value - user preference, not run state
+  }
+
   async function startAnalysis(request: AnalysisRequest) {
     error.value = null
     monthThreshold.value = request.monthThreshold
+    // Reset cleanup state so step 4 starts fresh for this new analysis run
+    resetCleanupState()
     try {
       const { jobId } = await api.postAnalysis(request)
       // Only initialize if WS hasn't already received and processed messages for this job.
