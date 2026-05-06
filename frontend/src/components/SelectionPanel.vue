@@ -156,7 +156,7 @@ async function proceedToPrepare() {
             </div>
             <p class="text-sm text-surface-400 mt-2">
               <span class="text-surface-600 dark:text-surface-300 font-medium">{{ formatSliderValue(sizeRange[0]) }}</span>
-              <span class="mx-1.5">–</span>
+              <span class="mx-1.5">-</span>
               <span class="text-surface-600 dark:text-surface-300 font-medium">{{ formatSliderValue(sizeRange[1]) }}</span>
             </p>
           </div>

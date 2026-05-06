@@ -147,7 +147,7 @@ const filteredCount = computed(() => {
       <Column field="matchMethod" header="Match" sortable style="width: 110px">
         <template #body="{ data }">
           <!-- Show a neutral dash when matchMethod is null; only actually-unmatched rows have status==="unmatched" -->
-          <span class="text-xs text-surface-500">{{ data.matchMethod ?? '—' }}</span>
+          <span class="text-xs text-surface-500">{{ data.matchMethod ?? '-' }}</span>
         </template>
       </Column>
       <Column field="sizeBytes" header="Size" sortable style="width: 100px">

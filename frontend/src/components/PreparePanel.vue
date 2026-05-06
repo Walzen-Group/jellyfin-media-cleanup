@@ -124,7 +124,7 @@ const moviesCollapsed = ref(false)
 
 /**
  * Per-panel PassThrough objects defined in script setup (not in template) so
- * that the ref objects are accessed as Ref<boolean> with .value — in the template
+ * that the ref objects are accessed as Ref<boolean> with .value - in the template
  * Vue auto-unwraps refs to plain booleans, making .value inaccessible.
  *
  * PrimeVue's built-in toggle button is hidden via the scoped :deep(.p-panel-toggle-button)

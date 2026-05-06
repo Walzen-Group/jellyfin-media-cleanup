@@ -174,7 +174,7 @@ onMounted(loadHistory)
               <Column field="path" header="Path" class="font-mono text-xs text-surface-500" />
               <Column field="seasonNumbers" header="Seasons" style="width: 100px">
                 <template #body="{ data }">
-                  {{ data.seasonNumbers?.join(', ') || '—' }}
+                  {{ data.seasonNumbers?.join(', ') || '-' }}
                 </template>
               </Column>
               <Column field="sizeBytes" header="Size" sortable style="width: 100px">

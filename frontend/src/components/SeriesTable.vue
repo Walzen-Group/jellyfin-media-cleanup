@@ -189,7 +189,7 @@ const filteredCount = computed(() => {
       <Column field="matchMethod" header="Match" sortable style="width: 110px">
         <template #body="{ data }">
           <!-- Show a neutral dash when matchMethod is null; only actually-unmatched rows have status==="unmatched" -->
-          <span class="text-xs text-surface-500">{{ data.matchMethod ?? '—' }}</span>
+          <span class="text-xs text-surface-500">{{ data.matchMethod ?? '-' }}</span>
         </template>
       </Column>
       <Column field="sizeBytes" header="Size" sortable style="width: 100px">
@@ -228,12 +228,12 @@ const filteredCount = computed(() => {
             <!-- For never-watched shows, display 'Added' date; for watched shows, display 'Last Played' date -->
             <Column field="lastPlayed" :header="data.status === 'never' || data.status === 'never_new' ? 'Added' : 'Last Played'" sortable>
               <template #body="{ data: s }">
-                {{ s.lastPlayed ? formatDate(s.lastPlayed) : (data.added ? formatDate(data.added) : '–') }}
+                {{ s.lastPlayed ? formatDate(s.lastPlayed) : (data.added ? formatDate(data.added) : '-') }}
               </template>
             </Column>
             <Column header="Episodes" sortable>
               <template #body="{ data: s }">
-                <span class="tabular-nums">{{ s.totalEpisodes || '–' }}</span>
+                <span class="tabular-nums">{{ s.totalEpisodes || '-' }}</span>
               </template>
             </Column>
             <Column field="sizeBytes" header="Size" sortable>

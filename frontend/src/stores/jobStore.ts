@@ -273,7 +273,7 @@ export const useJobStore = defineStore('job', () => {
     ensureStepData()
   }
 
-  // Defer restore until authenticated — called from App.vue after login
+  // Defer restore until authenticated - called from App.vue after login
   // restoreCurrentJob() is exposed and called externally
 
   async function startAnalysis(request: AnalysisRequest) {
