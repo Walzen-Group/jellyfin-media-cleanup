@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from media_cleanup.matching import MatchResult
+from media_cleanup.matching import MatchResult, normalize_title
 from media_cleanup.schema.radarr_schema import Movie
 from media_cleanup.schema.sonarr_schema import Series
 from media_cleanup.service import CleanupResult
@@ -194,33 +194,74 @@ def _build_all_series_groups(
             ],
         ))
 
+    # When a Sonarr show would be NEVER but a Jellyfin group of the same name
+    # is already UNMATCHED, the two are halves of the same show that failed to
+    # link (e.g. path-prefix collision). Don't classify it as NEVER -- that
+    # would leak it into the never-watched deletion bucket. Enrich the
+    # unmatched group with Sonarr metadata instead so deletion has the right
+    # path/id/size, and the user sees a single row.
+    unmatched_by_norm: dict[str, SeriesGroup] = {
+        normalize_title(g.title): g
+        for g in groups
+        if g.status == MediaStatus.UNMATCHED
+    }
+
     # Add never-watched series
     watched_paths = {s.matched_sonarr_path for s, _ in tagged if s.matched_sonarr_path}
     for series in result.all_series:
-        if series.path not in watched_paths:
-            never_status = _never_status(series.added, added_threshold)
-            never_season_count = len([sn for sn in series.seasons if sn.season_number > 0 and sn.statistics.size_on_disk > 0])
-            groups.append(SeriesGroup(
-                title=series.title,
-                library_path=series.path,
-                status=never_status,
-                added=series.added,
-                size_bytes=series.statistics.size_on_disk,
-                sonarr_series_id=series.id,
-                total_season_count=never_season_count,
-                seasons=[
-                    SeasonInfo(
-                        season_number=sn.season_number,
-                        last_played="",
-                        episode_count=0,
-                        total_episodes=sn.statistics.total_episode_count,
-                        size_bytes=sn.statistics.size_on_disk,
-                        status=never_status,
-                    )
-                    for sn in series.seasons
-                    if sn.season_number > 0
-                ],
-            ))
+        if series.path in watched_paths:
+            continue
+
+        norm = normalize_title(series.title)
+        if norm in unmatched_by_norm:
+            ug = unmatched_by_norm[norm]
+            ug.library_path = ug.library_path or series.path
+            ug.sonarr_series_id = ug.sonarr_series_id or series.id
+            ug.added = ug.added or series.added
+            ug.size_bytes = max(ug.size_bytes, series.statistics.size_on_disk)
+            on_disk_count = len([
+                sn for sn in series.seasons
+                if sn.season_number > 0 and sn.statistics.size_on_disk > 0
+            ])
+            ug.total_season_count = max(ug.total_season_count, on_disk_count)
+            existing_season_nums = {s.season_number for s in ug.seasons}
+            for sn in series.seasons:
+                if sn.season_number <= 0 or sn.season_number in existing_season_nums:
+                    continue
+                ug.seasons.append(SeasonInfo(
+                    season_number=sn.season_number,
+                    last_played="",
+                    episode_count=0,
+                    total_episodes=sn.statistics.total_episode_count,
+                    size_bytes=sn.statistics.size_on_disk,
+                    status=MediaStatus.UNMATCHED,
+                ))
+            ug.seasons.sort(key=lambda s: s.season_number)
+            continue
+
+        never_status = _never_status(series.added, added_threshold)
+        never_season_count = len([sn for sn in series.seasons if sn.season_number > 0 and sn.statistics.size_on_disk > 0])
+        groups.append(SeriesGroup(
+            title=series.title,
+            library_path=series.path,
+            status=never_status,
+            added=series.added,
+            size_bytes=series.statistics.size_on_disk,
+            sonarr_series_id=series.id,
+            total_season_count=never_season_count,
+            seasons=[
+                SeasonInfo(
+                    season_number=sn.season_number,
+                    last_played="",
+                    episode_count=0,
+                    total_episodes=sn.statistics.total_episode_count,
+                    size_bytes=sn.statistics.size_on_disk,
+                    status=never_status,
+                )
+                for sn in series.seasons
+                if sn.season_number > 0
+            ],
+        ))
 
     groups.sort(key=lambda g: g.title.lower())
     return groups

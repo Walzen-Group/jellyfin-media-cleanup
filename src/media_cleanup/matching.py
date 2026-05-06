@@ -94,6 +94,22 @@ class MatchResult:
 #  Movie matching (file-path level)
 # ------------------------------------------------------------------ #
 
+def _path_is_prefix(parent: str, full: str) -> bool:
+    """True if `parent` is a directory-boundary prefix of `full`.
+
+    Plain substring containment falsely matches sibling shows whose name
+    starts with another show's name (e.g. Sonarr "Bosch" inside Jellyfin
+    path "/tv/Bosch- Legacy/..."), so require the next char after `parent`
+    to be a path separator.
+    """
+    if not parent or not full:
+        return False
+    parent = parent.rstrip('/\\')
+    if full == parent:
+        return True
+    return full.startswith(parent + '/') or full.startswith(parent + '\\')
+
+
 def match_movies_by_path(
     jellyfin_paths: list[str],
     radarr_movies: list[Movie],
@@ -115,7 +131,7 @@ def match_movies_by_path(
     for i, jf_path in enumerate(jellyfin_paths):
         found = False
         for movie in radarr_movies:
-            if movie.path in jf_path:
+            if _path_is_prefix(movie.path, jf_path):
                 matched.append(MatchResult(
                     jellyfin_path=jf_path,
                     matched_title=movie.title,
@@ -343,7 +359,7 @@ def _path_match_by_prefix(
     /tv-ger/), only one library's path is checked. See resolve_series_paths().
     """
     for series in sonarr_series:
-        if series.path in jellyfin_path:
+        if _path_is_prefix(series.path, jellyfin_path):
             return series
     return None
 
